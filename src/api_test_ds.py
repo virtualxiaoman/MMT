@@ -1,15 +1,18 @@
 # Please install OpenAI SDK first: `pip3 install openai`
 
 from openai import OpenAI
-from src.utils import load_from_txt, ChatDS
+from src.utils import load_from_txt, ChatDS, ChatKimi
 
-role_name = "阿洛娜"
+role_name = "砂狼白子"
 chat_ds = ChatDS()
 chat_ds.init_role(role_name)
 # queries = ["你好，你是谁？详细告诉我一下你的情况吧？",
 #            "我跟你是什么关系呀？"]
 # chat_ds.multi_chat(queries)
 chat_ds.multi_chat()
+# chat_kimi = ChatKimi()
+# chat_kimi.init_role(role_name)
+# chat_kimi.multi_chat()
 
 # client = OpenAI(
 #     api_key=load_from_txt("../resources/api_key/deepseek.txt"),
