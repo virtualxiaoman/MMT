@@ -1,11 +1,12 @@
-import torch
-import transformers
-import onnx
-import onnxruntime
+from src.utils import ChatDSAPI
 
-print(torch.__version__)
-print(transformers.__version__)
-print(onnx.__version__)
-print(onnxruntime.__version__)
+role_name = "砂狼白子"
+chat_ds = ChatDSAPI()
+chat_ds.init_role(role_name)
+chat_ds.multi_chat()
+from src.utils import ChatKimiAPI
 
-# pip install torch transformers onnx onnxruntime
+role_name = "砂狼白子"
+chat_kimi = ChatKimiAPI()
+chat_kimi.init_role(role_name)
+chat_kimi.multi_chat()

@@ -40,10 +40,10 @@ class Chat(ABC):
         """
         if self.role_name in {"砂狼白子", "白子", "Shiroko"}:
             self.role_name = "砂狼白子"
-            role_prompt = load_from_txt("../resources/prompt/Shiroko.txt")
+            role_prompt = load_from_txt("./assets/prompt/Shiroko.txt")
         elif self.role_name in {"阿洛娜", "阿罗娜", "彩奈", "Arona"}:
             self.role_name = "阿洛娜"
-            role_prompt = load_from_txt("../resources/prompt/Arona.txt")
+            role_prompt = load_from_txt("./assets/prompt/Arona.txt")
         else:
             print("暂不支持该角色")
             return None
@@ -55,7 +55,7 @@ class Chat(ABC):
         }
         return role_system
 
-    def init_role(self, role_name: str = "阿洛娜") -> bool:
+    def init_role(self, role_name: str) -> bool:
         """
         自动初始化角色设定提示
         :param role_name: 角色名称
@@ -110,8 +110,8 @@ class Chat(ABC):
             return results
 
 
-class ChatDS(Chat):
-    def __init__(self, api_path="../resources/api_key/deepseek.txt", base_url="https://api.deepseek.com"):
+class ChatDSAPI(Chat):
+    def __init__(self, api_path="./assets/api_key/deepseek.txt", base_url="https://api.deepseek.com"):
         super().__init__()
         self.client = OpenAI(
             api_key=load_from_txt(api_path),
@@ -173,8 +173,8 @@ class ChatDS(Chat):
         return result
 
 
-class ChatKimi(Chat):
-    def __init__(self, api_path="../resources/api_key/kimi.txt", base_url="https://api.moonshot.cn/v1"):
+class ChatKimiAPI(Chat):
+    def __init__(self, api_path="./assets/api_key/kimi.txt", base_url="https://api.moonshot.cn/v1"):
         super().__init__()
         self.client = OpenAI(
             api_key=load_from_txt(api_path),
@@ -194,9 +194,9 @@ class ChatKimi(Chat):
             "content": query
         })
         completion = self.client.chat.completions.create(
-            model="moonshot-v1-8k",
+            model="kimi-k2.5",
             messages=self.msg,
-            temperature=0.8,
+            temperature=1,
         )
         result = completion.choices[0].message.content
         self.msg.append({
