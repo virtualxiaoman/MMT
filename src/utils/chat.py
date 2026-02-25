@@ -1,25 +1,10 @@
+from pathlib import Path
 from abc import ABC, abstractmethod
 from openai import OpenAI
 from requests.exceptions import HTTPError, ConnectionError, Timeout
 
-
-def load_from_txt(file_path):
-    """
-    从文件中加载文本
-    :param file_path: 文件路径
-    :return: str，文本内容
-    """
-    try:
-        # 尝试使用utf-8编码读取
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except UnicodeDecodeError:
-        try:
-            # 如果utf-8失败，尝试使用gbk编码
-            with open(file_path, 'r', encoding='gbk') as f:
-                return f.read()
-        except UnicodeDecodeError:
-            raise ValueError("无法识别的文件编码，请检查文件格式！")
+from src.utils.file import load_from_txt
+from src.config.path import API_KEY_DIR, PROMPT_DIR
 
 
 class Chat(ABC):
@@ -40,10 +25,13 @@ class Chat(ABC):
         """
         if self.role_name in {"砂狼白子", "白子", "Shiroko"}:
             self.role_name = "砂狼白子"
-            role_prompt = load_from_txt("./assets/prompt/Shiroko.txt")
+            # role_prompt = load_from_txt("../../assets/prompt/Shiroko.txt")
+            path = Path(PROMPT_DIR) / "Shiroko.txt"
+            role_prompt = load_from_txt(path)
         elif self.role_name in {"阿洛娜", "阿罗娜", "彩奈", "Arona"}:
             self.role_name = "阿洛娜"
-            role_prompt = load_from_txt("./assets/prompt/Arona.txt")
+            path = Path(PROMPT_DIR) / "Arona.txt"
+            role_prompt = load_from_txt(path)
         else:
             print("暂不支持该角色")
             return None
@@ -111,14 +99,15 @@ class Chat(ABC):
 
 
 class ChatDSAPI(Chat):
-    def __init__(self, api_path="./assets/api_key/deepseek.txt", base_url="https://api.deepseek.com"):
+    def __init__(self, api_path=None, base_url="https://api.deepseek.com"):
         super().__init__()
+        if api_path is None:
+            api_path = Path(API_KEY_DIR) / "deepseek.txt"
+
         self.client = OpenAI(
             api_key=load_from_txt(api_path),
             base_url=base_url
         )
-        self.role_name = None
-        self.msg = None
 
     def one_chat(self, query: str) -> str:
         """
@@ -170,18 +159,20 @@ class ChatDSAPI(Chat):
             "role": "assistant",
             "content": result
         })
+
+        # print(self.msg)
         return result
 
 
 class ChatKimiAPI(Chat):
-    def __init__(self, api_path="./assets/api_key/kimi.txt", base_url="https://api.moonshot.cn/v1"):
+    def __init__(self, api_path=None, base_url="https://api.moonshot.cn/v1"):
         super().__init__()
+        if api_path is None:
+            api_path = Path(API_KEY_DIR) / "kimi.txt"
         self.client = OpenAI(
             api_key=load_from_txt(api_path),
             base_url=base_url
         )
-        self.role_name = None
-        self.msg = None
 
     def one_chat(self, query: str) -> str:
         """
