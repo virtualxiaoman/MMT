@@ -1,12 +1,16 @@
 from pathlib import Path
-from ncatbot.core import BotClient, GroupMessage
+import asyncio
+import logging
+from typing import Dict
 
+from ncatbot.core import BotClient, GroupMessage
 from src.utils.chat import ChatDSAPI
 from src.utils.decider import ReplyDecider
 
-# from src.config.path import API_KEY_DIR
 
-# https://github.com/liyihao1110/ncatbot/issues/231
+# todo https://github.com/liyihao1110/ncatbot/issues/231
+
+
 # ========== 1. 创建 BotClient ==========
 bot = BotClient()
 

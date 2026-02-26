@@ -61,6 +61,7 @@ class ReplyDecider:
         """
         传入最新的一条消息，存入历史记录，并调用大模型判断是否需要回复
         """
+        return False
         if not user_text:
             return False
         # 1. 将最新的群聊消息加入历史记忆
