@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from openai import OpenAI
 from requests.exceptions import HTTPError, ConnectionError, Timeout
 
+from src.config.models import model_settings
 from src.utils.file import load_from_txt
 from src.config.path import API_KEY_DIR, PROMPT_DIR
 
@@ -99,8 +100,21 @@ class Chat(ABC):
 
 
 class ChatDSAPI(Chat):
-    def __init__(self, api_path=None, base_url="https://api.deepseek.com"):
+    def __init__(self, model_name=None, api_path=None, base_url="https://api.deepseek.com"):
         super().__init__()
+
+        if model_name is None:
+            if model_settings.reply.get("name") == "deepseek-chat":
+                self.model_name = model_settings.reply.get("name")  # 这里暂不支持deepseek-reasoner
+            else:
+                self.model_name = "deepseek-chat"  # 默认使用 deepseek-chat 模型，确保兼容性
+        else:
+            if model_name in {"deepseek-chat", "deepseek-reasoner"}:  # 注意这里暂不支持deepseek-reasoner，但先这样写
+                self.model_name = model_name
+            else:
+                print(f"不支持的模型名称 {model_name}，默认使用 deepseek-chat")
+                self.model_name = "deepseek-chat"
+
         if api_path is None:
             api_path = Path(API_KEY_DIR) / "deepseek.txt"
 
@@ -122,7 +136,7 @@ class ChatDSAPI(Chat):
         # print(self.msg)
         try:
             completion = self.client.chat.completions.create(
-                model="deepseek-chat",
+                model=self.model_name,
                 messages=self.msg,
                 temperature=1.3,
                 # deepseek建议通用对话设置为1.3：https://api-docs.deepseek.com/zh-cn/quick_start/parameter_settings

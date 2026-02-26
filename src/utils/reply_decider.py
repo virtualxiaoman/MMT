@@ -2,17 +2,22 @@ import ollama
 import re
 import random
 
+from src.utils.chat import ChatDSAPI
+
+from src.config.models import model_settings
+
 
 class ReplyDecider:
-    def __init__(self, name, qq_id, model_name="qwen3-vl:4b"):
+    def __init__(self, name, qq_id, model_name=None):
         """
         初始化判决器
         :param model_name: 本地部署的 ollama 模型名称
         :param name: 你在群聊中的昵称或标识，帮助模型识别是否在叫你
         """
-        self.model_name = model_name
         self.name = name
         self.qq_id = qq_id
+        if model_name is None:
+            self.model_name = model_settings.decide.get("name")
 
         # 初始化多轮对话的历史记忆，系统提示词定调
         self.history = [
@@ -22,9 +27,10 @@ class ReplyDecider:
                     f"你是一个专门用于判断群聊消息是否需要用户回复的AI助手。该用户的名字是 '{self.name}'。"
                     "仔细阅读给出的群聊消息上下文。"
                     "如果最新的一条消息是向该用户对话、或者结合上下文判断应该需要该用户参与和回复，请严格输出 'True'。"
-                    "对于其他人的闲聊，可以适时加入话题中，此时请严格输出 'True'。"
+                    "对于其他人的闲聊，可以判断时机适时加入话题中，此时请严格输出 'True'。"
                     "但如果不需要该用户插话，请严格输出 'False'。"
-                    "一般而言每聊几句闲话你就可以适当加入一次（严格输出 'True'），保持活跃度，但也不要过于频繁以免打扰。"
+                    "一般而言当其他人聊5~8句你就可以适当加入一次（严格输出 'True'），保持活跃度."
+                    "但也不要过于频繁以免打扰別人了。也就是除非你觉得非常有必要，否则不要连续回复（严格输出 'False'）。"
                     "注意：你的回复只能包含 'True' 或 'False'，不要输出任何额外的标点符号、解释或说明。"
                 )
             }
@@ -41,6 +47,7 @@ class ReplyDecider:
             "repeat_penalty": 1.1,
             "repeat_last_n": 64,
         }
+        self.chat_ds = ChatDSAPI()
 
     def _parse_response(self, response_text: str) -> bool:
         """
@@ -61,7 +68,7 @@ class ReplyDecider:
         """
         传入最新的一条消息，存入历史记录，并调用大模型判断是否需要回复
         """
-        return False
+        # return False
         if not user_text:
             return False
         # 1. 将最新的群聊消息加入历史记忆
@@ -79,17 +86,34 @@ class ReplyDecider:
             return True
 
         try:
-            # 3. 调用 ollama 接口进行预测
-            response = ollama.chat(model=self.model_name, messages=self.history, options=self.options)
-            reply_content = response['message']['content']
-            print(f"{self.name}认为是否需要回复的原始模型输出: '{reply_content}'")
-            needs_reply = self._parse_response(reply_content)
+            # model_name = model_settings.decide.get("name")
+            model_type = model_settings.decide.get("type")
 
-            # 4. 将助手的判断也存入历史，维持标准的多轮对话格式 (User -> Assistant -> User -> ...)
-            self.history.append({
-                "role": "assistant",
-                "content": "True" if needs_reply else "False"  # 存入标准布尔字符串，帮助模型在后续对话中保持格式一致性
-            })
+            if model_type == "local":
+                # 3. 调用 ollama 接口进行预测
+                response = ollama.chat(
+                    model=self.model_name,
+                    messages=self.history,
+                    options=self.options
+                )
+                reply_content = response['message']['content']
+                print(f"[ReplyDecider-本地模型]{self.name}认为是否需要回复的原始模型输出: '{reply_content}'")
+                needs_reply = self._parse_response(reply_content)
+                # 4. 将助手的判断也存入历史，维持标准的多轮对话格式 (User -> Assistant -> User -> ...)
+                self.history.append({
+                    "role": "assistant",
+                    "content": "True" if needs_reply else "False"  # 存入标准布尔字符串，帮助模型在后续对话中保持格式一致性
+                })
+
+            else:
+                # 初始self.msg = []，此时才要copy
+                if not self.chat_ds.msg:
+                    print(f"[ReplyDecider-API模型]首次调用，正在将提示词传入 ChatDSAPI 实例...")
+                    self.chat_ds.msg = self.history.copy()  # 将当前历史传入 ChatDSAPI 实例
+                reply_content = self.chat_ds.one_chat(user_text)
+                print(f"[ReplyDecider-API模型]{self.name}认为是否需要回复的原始模型输出: '{reply_content}'")
+                needs_reply = self._parse_response(reply_content)
+                self.history = self.chat_ds.msg.copy()  # 将 ChatDSAPI 实例的历史覆盖回来，保持两者同步
 
             return needs_reply
 

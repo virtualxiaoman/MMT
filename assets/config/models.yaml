@@ -1,0 +1,12 @@
+models:
+  reply_model:
+    name: "deepseek-chat"   # 暂不支持其他模型，请勿修改
+    type: "api"             # 暂只支持api，请勿修改
+
+  decide_model:
+    name: "deepseek-chat"   # 或者qwen3-vl:4b/qwen3-vl:8b搭配local
+    type: "api"             # 或者qwen3-vl:4b/qwen3-vl:8b搭配local
+
+  emoji_model:
+    name: "deepseek-chat"   # 开发中，请勿修改
+    type: "api"             # 开发中，请勿修改
