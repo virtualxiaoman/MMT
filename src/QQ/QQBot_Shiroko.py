@@ -1,11 +1,15 @@
 import asyncio
 import logging
+from pathlib import Path
 from typing import Dict, Union
 
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage  # 导入 PrivateMessage
+
+from src.config.path import VOICE_DIR
 from src.utils.chat import ChatDSAPI
 from src.utils.reply_decider import ReplyDecider
 from src.utils.emoji_decider import EmojiDecider
+from src.utils.voice_decider import VoiceDecider
 
 # todo 戳一戳 https://github.com/liyihao1110/ncatbot/issues/231
 
@@ -68,19 +72,30 @@ class BotManager:
         should_reply = True if is_private else session.reply_decider.check_if_should_reply(user_text)
         if should_reply:
             ai_reply = await session.get_reply(user_text)  # 生成回复
-            emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=1)  # 表情包路径
-            # image_cq = f"[CQ:image,file=file:///{emoji_path}]"
-            # final_reply = f"{ai_reply}\n{image_cq}"  # 合并文本和图片
+            emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
+            voice_decider = VoiceDecider(Path(VOICE_DIR) / "Shiroko/description.csv")  # 初始化匹配器
+            voice_path = voice_decider.match(ai_reply, threshold=0.712)
+            if voice_path:
+                voice_path = str(Path(VOICE_DIR) / "Shiroko" / voice_path) # 获取语音路径
             # 根据消息类型调用不同 API
             if is_private:
                 await bot.api.post_private_msg(user_id=msg.user_id, text=ai_reply)
                 if emoji_path:
                     await bot.api.post_private_msg(user_id=msg.user_id, image=emoji_path)
+                if voice_path:
+                    await bot.api.send_private_record(user_id=msg.user_id, file=voice_path)
+                # record_path = "G:/Projects/py/MMT/assets/voice/Shiroko/0076.wav"
+                # record_path = "F:/Audio/Music/流光协奏演唱会版《为了你唱下去》编曲扒带(BV1xNsLzaEQ7).mp3"
+                # await bot.api.send_private_record(user_id=msg.user_id, file=record_path)
                 logger.info(f"已回复用户 {msg.user_id} 的私聊消息")
             else:
                 await bot.api.post_group_msg(group_id=msg.group_id, text=ai_reply)
                 if emoji_path:
                     await bot.api.post_group_msg(group_id=msg.group_id, image=emoji_path)
+                if voice_path:
+                    await bot.api.send_group_record(group_id=msg.group_id, file=voice_path)
+                # record_path = "F:/Audio/Music/洛天依 - 为了你唱下去_EM.flac"
+                # await bot.api.send_group_record(group_id=msg.group_id, file=record_path)
                 logger.info(f"已回复群 {msg.group_id} 的消息")
 
         else:

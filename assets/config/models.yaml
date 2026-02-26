@@ -1,12 +1,12 @@
 models:
-  reply_model:
+  reply_model:              # 回复模型，负责生成回复内容
     name: "deepseek-chat"   # 暂不支持其他模型，请勿修改
     type: "api"             # 暂只支持api，请勿修改
 
-  decide_model:
-    name: "deepseek-chat"   # 或者qwen3-vl:4b/qwen3-vl:8b搭配local
+  decide_model:             # 决策模型，负责判断当前是否应该回复
+    name: "deepseek-chat"   # 暂不支持其他api模型
     type: "api"             # 或者qwen3-vl:4b/qwen3-vl:8b搭配local
 
-  emoji_model:
+  emoji_model:              # 表情模型，负责选取本地对应的表情包
     name: "deepseek-chat"   # 开发中，请勿修改
     type: "api"             # 开发中，请勿修改

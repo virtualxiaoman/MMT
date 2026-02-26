@@ -3,7 +3,7 @@ import re
 import random
 
 from src.utils.chat import ChatDSAPI
-
+from src.config.path import PROMPT_DIR
 from src.config.models import model_settings
 
 
@@ -18,7 +18,8 @@ class ReplyDecider:
         self.qq_id = qq_id
         if model_name is None:
             self.model_name = model_settings.decide.get("name")
-
+        else:
+            self.model_name = model_name
         # 初始化多轮对话的历史记忆，系统提示词定调
         self.history = [
             {
@@ -68,7 +69,7 @@ class ReplyDecider:
         """
         传入最新的一条消息，存入历史记录，并调用大模型判断是否需要回复
         """
-        # return False
+        # return True
         if not user_text:
             return False
         # 1. 将最新的群聊消息加入历史记忆

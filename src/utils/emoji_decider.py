@@ -8,12 +8,13 @@ from src.config.models import model_settings
 from src.utils.chat import ChatDSAPI
 
 
+# todo 暂时懒得支持在yaml里面修改
 class EmojiDecider(ChatDSAPI):
     def __init__(self, emoji_list=None, model_name=None):
         super().__init__(model_name=model_name or "deepseek-chat")
         if emoji_list is None:
             self.emoji_list = ["安详", "担忧", "好奇", "紧张", "惊讶", "难过", "平静", "微笑",
-                               "委屈", "疑惑", "震惊"]  # 暂时只写白子的
+                               "委屈", "疑惑", "震惊"]  # todo 暂时只写白子的
         else:
             self.emoji_list = emoji_list
         self.system_prompt = None
@@ -82,13 +83,13 @@ class EmojiDecider(ChatDSAPI):
         res = self.decide(query)
         return str(res)
 
-    def get_emoji_path(self, text, p=0.8):
+    def get_emoji_path(self, text, p=0.5):
         """提供一个外部接口，直接返回表情路径或 False"""
         if random.random() < p:  # 以 p 的概率调用模型决策，保持一定的随机性，避免过于死板
             res = self.decide(text)
             if res and res in self.emoji_list:
                 print(f"表情: {res}")
-                emoji_path = Path(EMOJI_DIR) / "Shiroko" / f"{res}.png"  # todo 这里应该使用self.role_name
+                emoji_path = Path(EMOJI_DIR) / "Shiroko" / f"{res}.png"  # todo 这里应该使用self.role_name，另外应该支持相同表情的随机输出
                 # 检查路径下是否存在对应的表情图片，如果不存在则返回 False
                 if emoji_path.exists():
                     return str(emoji_path)
