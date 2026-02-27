@@ -6,10 +6,11 @@ from typing import Dict, Union
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage  # 导入 PrivateMessage
 
 from src.config.path import VOICE_DIR
-from src.utils.chat import ChatDSAPI
-from src.utils.reply_decider import ReplyDecider
-from src.utils.emoji_decider import EmojiDecider
-from src.utils.voice_decider import VoiceDecider
+from src.utils.chat.chat import ChatDSAPI
+from src.utils.chat.reply_decider import ReplyDecider
+from src.utils.chat.emoji_decider import EmojiDecider
+from src.utils.chat.voice_decider import VoiceDecider
+from src.utils.tools.rand_pic import RandomPicture
 
 # todo 戳一戳 https://github.com/liyihao1110/ncatbot/issues/231
 
@@ -19,6 +20,11 @@ logger = logging.getLogger(__name__)
 # 配置
 BOT_NAME = "白子"
 BOT_QQ_ID = 1291606697
+RAND_PIC_PATHS = [
+    "F:/Picture/pixiv/BA",
+    "F:/Picture/pixiv/甘城",
+    "F:/Picture/pixiv/LuoTianyi"
+]
 
 
 class ChatSession:
@@ -29,6 +35,7 @@ class ChatSession:
         self.reply_decider = ReplyDecider(name=BOT_NAME, qq_id=BOT_QQ_ID)
         self.emoji_decider = EmojiDecider()
         self.ai_backend.init_role(BOT_NAME)
+        self.random_picture = RandomPicture(RAND_PIC_PATHS)
         logger.info(f"已为{'私聊' if is_private else '群聊'} {session_id} 初始化 AI 会话")
 
     async def get_reply(self, text: str) -> str:
@@ -67,7 +74,17 @@ class BotManager:
             return
 
         session = self.get_session(session_id, is_private)
-
+        if user_text == "一图":
+            random_path = session.random_picture.get_random_image_path()
+            # print(f"随机选取的图片路径是: {random_path}")
+            if is_private:
+                await bot.api.post_private_msg(user_id=msg.user_id, image=random_path)
+                logger.info(f"已回复用户 {msg.user_id} 的随机图片, 路径: {random_path}")
+            else:
+                await bot.api.post_group_msg(group_id=msg.group_id, text=f"呐呐呐~coins-5")
+                await bot.api.post_group_msg(group_id=msg.group_id, image=random_path)
+                logger.info(f"已回复群 {msg.group_id} 的随机图片, 路径: {random_path}")
+            return
         # 判定是否回复：私聊默认回复，群聊由 decider 判定
         should_reply = True if is_private else session.reply_decider.check_if_should_reply(user_text)
         if should_reply:
@@ -76,7 +93,7 @@ class BotManager:
             voice_decider = VoiceDecider(Path(VOICE_DIR) / "Shiroko/description.csv")  # 初始化匹配器
             voice_path = voice_decider.match(ai_reply, threshold=0.712)
             if voice_path:
-                voice_path = str(Path(VOICE_DIR) / "Shiroko" / voice_path) # 获取语音路径
+                voice_path = str(Path(VOICE_DIR) / "Shiroko" / voice_path)  # 获取语音路径
             # 根据消息类型调用不同 API
             if is_private:
                 await bot.api.post_private_msg(user_id=msg.user_id, text=ai_reply)

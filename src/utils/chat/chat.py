@@ -4,7 +4,7 @@ from openai import OpenAI
 from requests.exceptions import HTTPError, ConnectionError, Timeout
 
 from src.config.models import model_settings
-from src.utils.file import load_from_txt
+from src.utils.tools.file import load_from_txt
 from src.config.path import API_KEY_DIR, PROMPT_DIR
 
 

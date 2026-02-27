@@ -11,8 +11,10 @@
 填写api： 在路径`assets/api_key`下至少创建`deepseek.txt`，并填入形如`sk-...`的API Key。
 ### 2. 命令行模式
 执行`main.py`，即：
+
 ```python
-from src.utils.chat import ChatDSAPI
+from src.utils.chat.chat import ChatDSAPI
+
 role_name = "砂狼白子"
 chat_ds = ChatDSAPI()
 chat_ds.init_role(role_name)

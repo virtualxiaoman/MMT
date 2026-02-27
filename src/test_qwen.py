@@ -1,5 +1,5 @@
 from openai import OpenAI
-from src.utils.file import load_from_txt
+from src.utils.tools.file import load_from_txt
 
 try:
     client = OpenAI(

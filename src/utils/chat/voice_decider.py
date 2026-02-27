@@ -4,7 +4,7 @@ import dashscope
 from pathlib import Path
 
 from src.config.path import VOICE_DIR, API_KEY_DIR
-from src.utils.file import load_from_txt
+from src.utils.tools.file import load_from_txt
 
 
 # todo 本地部署： https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B/tree/main
@@ -73,7 +73,7 @@ class VoiceDecider:
         best_idx = np.argmax(similarities)
         max_score = similarities[best_idx]
 
-        print(f"[VoiceDecider] 查询: '{user_query}' -> 最优匹配: '{self.df.iloc[best_idx]['content']}' (得分: {max_score:.4f})")
+        print(f"[VoiceDecider] '{user_query}' -> 匹配: '{self.df.iloc[best_idx]['content']}' (得分: {max_score:.4f})")
 
         # 4. 阈值判断
         if max_score >= threshold:

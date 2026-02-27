@@ -3,9 +3,8 @@ from pathlib import Path
 import random
 
 from src.config.path import PROMPT_DIR, EMOJI_DIR
-from src.utils.file import load_from_txt
-from src.config.models import model_settings
-from src.utils.chat import ChatDSAPI
+from src.utils.tools.file import load_from_txt
+from src.utils.chat.chat import ChatDSAPI
 
 
 # todo 暂时懒得支持在yaml里面修改
