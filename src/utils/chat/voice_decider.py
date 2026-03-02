@@ -50,7 +50,7 @@ class VoiceDecider:
         print(f"向量库已保存至: {self.vector_cache_path}")
         return vectors_np
 
-    def match(self, user_query, threshold=0.8):
+    def match(self, user_query, threshold=0.712):
         """
         匹配最相似的语音
         :param user_query: 用户输入的文本

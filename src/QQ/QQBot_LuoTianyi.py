@@ -12,17 +12,13 @@ from src.utils.chat.emoji_decider import EmojiDecider
 from src.utils.chat.voice_decider import VoiceDecider
 from src.utils.tools.rand_pic import RandomPicture
 
-# todo 戳一戳 https://github.com/liyihao1110/ncatbot/issues/231
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # 配置
-BOT_NAME = "白子"
-BOT_QQ_ID = 1291606697
+BOT_NAME = "洛天依"
+BOT_QQ_ID = 1121221045
 RAND_PIC_PATHS = [
-    "F:/Picture/pixiv/BA",
-    "F:/Picture/pixiv/甘城",
     "F:/Picture/pixiv/LuoTianyi"
 ]
 

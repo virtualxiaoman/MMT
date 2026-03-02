@@ -33,6 +33,10 @@ class Chat(ABC):
             self.role_name = "阿洛娜"
             path = Path(PROMPT_DIR) / "Arona.txt"
             role_prompt = load_from_txt(path)
+        elif self.role_name in {"洛天依", "天依", "Luo Tianyi", "LuoTianyi"}:
+            self.role_name = "洛天依"
+            path = Path(PROMPT_DIR) / "LuoTianyi.txt"
+            role_prompt = load_from_txt(path)
         else:
             print("暂不支持该角色")
             return None
