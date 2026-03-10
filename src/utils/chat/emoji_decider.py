@@ -3,8 +3,9 @@ from pathlib import Path
 import random
 
 from src.config.path import PROMPT_DIR, EMOJI_DIR
+from src.config.cur_role import current_role
 from src.utils.tools.file import load_from_txt
-from src.utils.chat.chat import ChatDSAPI
+from src.utils.chat.role_chat import ChatDSAPI
 
 
 # todo 暂时懒得支持在yaml里面修改
@@ -88,7 +89,7 @@ class EmojiDecider(ChatDSAPI):
             res = self.decide(text)
             if res and res in self.emoji_list:
                 print(f"表情: {res}")
-                emoji_path = Path(EMOJI_DIR) / "Shiroko" / f"{res}.png"  # todo 这里应该使用self.role_name，另外应该支持相同表情的随机输出
+                emoji_path = Path(EMOJI_DIR) / current_role.name_en / f"{res}.png"  # todo 应该支持相同表情的随机输出
                 # 检查路径下是否存在对应的表情图片，如果不存在则返回 False
                 if emoji_path.exists():
                     return str(emoji_path)

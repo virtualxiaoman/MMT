@@ -1,21 +1,26 @@
+import warnings
+import yaml
+import os
 from pathlib import Path
 from abc import ABC, abstractmethod
 from openai import OpenAI
 from requests.exceptions import HTTPError, ConnectionError, Timeout
 
 from src.config.models import model_settings
+from src.config.cur_role import CurrentRole
 from src.utils.tools.file import load_from_txt
-from src.config.path import API_KEY_DIR, PROMPT_DIR
+from src.config.path import API_KEY_DIR, PROMPT_DIR, CONFIG_DIR
 
 
 class Chat(ABC):
     def __init__(self):
         # 统一管理会话历史记录
         self.msg = []
-        # 角色名称
-        self.role_name = None
+        # 角色名称。命名约定：官方名称，中文名使用全称，英文名称大小写参考官方（尽量首字母大写），但不含空格
+        self.role_name_zh = None
+        self.role_name_en = None
 
-    def init_role_prompt(self):
+    def _init_role_prompt(self):
         """
         初始化角色设定提示
         :return: json，角色设定提示：
@@ -24,24 +29,28 @@ class Chat(ABC):
             "content": role_prompt,
           }
         """
-        if self.role_name in {"砂狼白子", "白子", "Shiroko"}:
-            self.role_name = "砂狼白子"
-            # role_prompt = load_from_txt("../../assets/prompt/Shiroko.txt")
-            path = Path(PROMPT_DIR) / "Shiroko.txt"
-            role_prompt = load_from_txt(path)
-        elif self.role_name in {"阿洛娜", "阿罗娜", "彩奈", "Arona"}:
-            self.role_name = "阿洛娜"
-            path = Path(PROMPT_DIR) / "Arona.txt"
-            role_prompt = load_from_txt(path)
-        elif self.role_name in {"洛天依", "天依", "Luo Tianyi", "LuoTianyi"}:
-            self.role_name = "洛天依"
-            path = Path(PROMPT_DIR) / "LuoTianyi.txt"
-            role_prompt = load_from_txt(path)
+        if self.role_name_zh in {"砂狼白子", "白子", "Shiroko"}:
+            self.role_name_zh = "砂狼白子"
+            self.role_name_en = "Shiroko"
+        elif self.role_name_zh in {"阿洛娜", "阿罗娜", "彩奈", "Arona"}:
+            self.role_name_zh = "阿洛娜"
+            self.role_name_en = "Arona"
+        elif self.role_name_zh in {"洛天依", "天依", "Luo Tianyi", "LuoTianyi"}:
+            self.role_name_zh = "洛天依"
+            self.role_name_en = "LuoTianyi"
         else:
             print("暂不支持该角色")
             return None
+        path = Path(PROMPT_DIR) / f"{self.role_name_en}.txt"
+        if not path.exists():
+            warnings.warn(f"角色设定提示词文件 {path} 不存在")
+            return None
+        else:
+            role_prompt = load_from_txt(path)
 
-        print(f"初始化角色{self.role_name}的prompt成功")
+        temp_cur_role = CurrentRole()
+        temp_cur_role.update_role_yaml(role_name_zh=self.role_name_zh, role_name_en=self.role_name_en)
+        print(f"初始化角色{self.role_name_zh}的prompt成功")
         role_system = {
             "role": "system",
             "content": role_prompt,
@@ -54,8 +63,8 @@ class Chat(ABC):
         :param role_name: 角色名称
         :return: bool，初始化是否成功
         """
-        self.role_name = role_name
-        role_system = self.init_role_prompt()
+        self.role_name_zh = role_name
+        role_system = self._init_role_prompt()
         if role_system is not None:
             self.msg = [
                 role_system,  # 角色设定提示
@@ -88,17 +97,17 @@ class Chat(ABC):
             while True:
                 query = input(">>> ").strip()
                 if query.lower() == "quit":
-                    print(f"与{self.role_name}的对话结束")
+                    print(f"与{self.role_name_zh}的对话结束")
                     break
                 result = self.one_chat(query)  # 这里要求one_chat返回str
-                print(f"{self.role_name}：{result}")
+                print(f"{self.role_name_zh}：{result}")
         else:
             # 批量处理模式
             results = []
             for query in queries:
                 print(f">>> {query}")
                 result = self.one_chat(query)
-                print(f"{self.role_name}:{result}")
+                print(f"{self.role_name_zh}:{result}")
                 results.append(result)
             return results
 

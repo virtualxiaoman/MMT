@@ -1,6 +1,6 @@
 # https://platform.deepseek.com/usage
 
-from src.utils.chat.chat import ChatDSAPI
+from src.utils.chat.role_chat import ChatDSAPI
 
 role_name = "砂狼白子"
 chat_ds = ChatDSAPI()

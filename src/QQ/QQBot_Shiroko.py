@@ -5,8 +5,9 @@ from typing import Dict, Union
 
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage  # 导入 PrivateMessage
 
+from src.config.cur_role import current_role
 from src.config.path import VOICE_DIR
-from src.utils.chat.chat import ChatDSAPI
+from src.utils.chat.role_chat import ChatDSAPI
 from src.utils.chat.reply_decider import ReplyDecider
 from src.utils.chat.emoji_decider import EmojiDecider
 from src.utils.chat.voice_decider import VoiceDecider
@@ -90,10 +91,10 @@ class BotManager:
         if should_reply:
             ai_reply = await session.get_reply(user_text)  # 生成回复
             emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
-            voice_decider = VoiceDecider(Path(VOICE_DIR) / "Shiroko/description.csv")  # 初始化匹配器
+            voice_decider = VoiceDecider(Path(VOICE_DIR) / f"{current_role.name_en}/description.csv")  # 初始化匹配器
             voice_path = voice_decider.match(ai_reply, threshold=0.712)
             if voice_path:
-                voice_path = str(Path(VOICE_DIR) / "Shiroko" / voice_path)  # 获取语音路径
+                voice_path = str(Path(VOICE_DIR) / f"{current_role.name_en}/{voice_path}")  # 获取语音路径
             # 根据消息类型调用不同 API
             if is_private:
                 await bot.api.post_private_msg(user_id=msg.user_id, text=ai_reply)

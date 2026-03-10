@@ -2,8 +2,13 @@ import ollama
 import re
 import random
 
-from src.utils.chat.chat import ChatDSAPI
+from src.utils.chat.role_chat import ChatDSAPI
 from src.config.models import model_settings
+
+NO_REPLY_MESSAGES = [
+    "呐，Coins-5 ~",
+    "呆毛你好可爱吖",
+]
 
 
 class ReplyDecider:
@@ -35,7 +40,7 @@ class ReplyDecider:
                 )
             }
         ]
-        self.options = {
+        self.options_local = {
             # 常用采样控制
             "temperature": 0.8,
             "top_p": 0.9,
@@ -71,6 +76,9 @@ class ReplyDecider:
         # return False
         if not user_text:
             return False
+        if user_text in NO_REPLY_MESSAGES:
+            print(f"[ReplyDecider] 消息 '{user_text}' 在 NO_REPLY_MESSAGES 列表中，直接返回 False")
+            return False
         # 1. 将最新的群聊消息加入历史记忆
         self.history.append({
             "role": "user",
@@ -94,7 +102,7 @@ class ReplyDecider:
                 response = ollama.chat(
                     model=self.model_name,
                     messages=self.history,
-                    options=self.options
+                    options=self.options_local
                 )
                 reply_content = response['message']['content']
                 print(f"[ReplyDecider-本地模型]{self.name}认为是否需要回复的原始模型输出: '{reply_content}'")

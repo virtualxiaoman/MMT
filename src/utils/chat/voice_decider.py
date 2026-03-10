@@ -3,6 +3,7 @@ import numpy as np
 import dashscope
 from pathlib import Path
 
+from src.config.cur_role import current_role
 from src.config.path import VOICE_DIR, API_KEY_DIR
 from src.utils.tools.file import load_from_txt
 
@@ -83,7 +84,7 @@ class VoiceDecider:
 
 
 if __name__ == "__main__":
-    csv_file = Path(VOICE_DIR) / "Shiroko/description.csv"
+    csv_file = Path(VOICE_DIR) / f"{current_role.name_en}/description.csv"
     voice_decider = VoiceDecider(csv_file)  # 初始化匹配器
     test_text = "我想帮助老师"
     result = voice_decider.match(test_text, threshold=0.85)

@@ -1,0 +1,37 @@
+common_parts:
+  admin_qq: &master_admin_private 2958694743  # 管理员的QQ号，默认白名单，且无论如何强制允许使用
+  admin_group: &master_admin_group 1039857271  # 管理员所在的群号，默认白名单，但可被mode=false屏蔽
+  black_private: &global_blacklist_private [ 114514, 1919810 ]  # 共同的私聊黑名单
+  black_group: &global_blacklist_group [ 114514, 1919810 ]  # 共同的群聊黑名单
+
+QQ:
+  "1121221045": # 机器人QQ号
+    name: "洛天依"
+    private: # 私聊设置
+      mode: "true"      # 设置为auto时采用白名单+黑名单的模式(优先级：白名单>黑名单)，设置为true时所有人都可以使用，设置为false时所有人都不可以使用
+      whitelist: [ *master_admin_private, 1291606697 ]      # 白名单，优先级高于黑名单
+      blacklist: *global_blacklist_private  # 黑名单，优先级低于白名单
+    group: # 群聊设置
+      mode: "false"      # 同上
+      whitelist: [ *master_admin_group ]  # 群白名单，优先级高于群黑名单
+      blacklist: *global_blacklist_group  # 群黑名单，优先级低于群白名单
+  "1291606697": # 机器人QQ号
+    name: "砂狼白子"
+    private:
+      mode: "true"
+      whitelist: [ *master_admin_private, 1121221045 ]
+      blacklist: *global_blacklist_private
+    group:
+      mode: "auto"
+      whitelist: [*master_admin_group]
+      blacklist: *global_blacklist_group
+  "default": # 默认设置，适用于未在上面单独配置的QQ号
+    name: "default"
+    private:
+      mode: auto
+      whitelist: [*master_admin_private]
+      blacklist: *global_blacklist_private
+    group:
+      mode: auto
+      whitelist: [*master_admin_group]
+      blacklist: *global_blacklist_group

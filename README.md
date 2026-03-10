@@ -13,7 +13,7 @@
 执行`main.py`，即：
 
 ```python
-from src.utils.chat.chat import ChatDSAPI
+from src.utils.chat.role_chat import ChatDSAPI
 
 role_name = "砂狼白子"
 chat_ds = ChatDSAPI()
