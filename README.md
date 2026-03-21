@@ -6,6 +6,22 @@
 3. 支持图片、语音等多模态输入输出；
 4. 除了调用api还允许本地部署。
 
+演示如下:
+<div align="center">
+  <img src="docs/img/Image_157326988835992.png" width="45%" />
+  <img src="docs/img/Image_157518972057696.png" width="45%" />
+</div>
+其中左图使用的是日语语音：先生と一緒にいると…
+
+<details>
+<summary>长图警告，点击以展开更多图片</summary>
+<div align="center">
+  <img src="docs/img/Image_158349257022437.png" width="32%" />
+  <img src="docs/img/Image_158370377168285.png" width="32%" />
+  <img src="docs/img/Image_158388237679132.png" width="32%" />
+</div>
+</details>
+
 ## 一、快速开始
 ### 1. 环境配置
 填写api： 在路径`assets/api_key`下至少创建`deepseek.txt`，并填入形如`sk-...`的API Key。
