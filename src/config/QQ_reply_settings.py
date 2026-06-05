@@ -370,24 +370,24 @@ class QQReplySettings:
         if mode == "true":
             print(f"[QQReplySettings] {self.bot_id} 的 mode 设置为 true，强制允许访问")
             return True
-        if mode == "false":
+        elif mode == "false":
             print(f"[QQReplySettings] {self.bot_id} 的 mode 设置为 false，强制拒绝访问")
             return False
+        else:
+            # 2. auto 模式：优先级 白名单 > 黑名单
+            whitelist = conf.get("whitelist", [])
+            blacklist = conf.get("blacklist", [])
 
-        # 2. auto 模式：优先级 白名单 > 黑名单
-        whitelist = conf.get("whitelist", [])
-        blacklist = conf.get("blacklist", [])
+            if target_id in whitelist:
+                print(f"[QQReplySettings] {target_id} 在 {self.bot_id} 的白名单中，允许访问")
+                return True
+            if target_id in blacklist:
+                print(f"[QQReplySettings] {target_id} 在 {self.bot_id} 的黑名单中，拒绝访问")
+                return False
 
-        if target_id in whitelist:
-            print(f"[QQReplySettings] {target_id} 在 {self.bot_id} 的白名单中，允许访问")
+            # 3. 如果都不在，默认允许
+            print(f"[QQReplySettings] {target_id} 不在 {self.bot_id} 的白名单或黑名单中，默认允许访问")
             return True
-        if target_id in blacklist:
-            print(f"[QQReplySettings] {target_id} 在 {self.bot_id} 的黑名单中，拒绝访问")
-            return False
-
-        # 3. 如果都不在，默认允许
-        print(f"[QQReplySettings] {target_id} 不在 {self.bot_id} 的白名单或黑名单中，默认允许访问")
-        return True
 
     def can_reply_private(self, user_id: int) -> bool:
         """

@@ -49,10 +49,63 @@ class ChatSession:
             return "呜... 脑子转不过来了..."
 
 
+class MessageSender:
+    def __init__(self, bot: BotClient, msg: Union[GroupMessage, PrivateMessage]):
+        self.bot = bot
+        self.msg = msg
+        self.is_private = isinstance(msg, PrivateMessage)
+
+    # 文本
+    async def text(self, content: str):
+        if self.is_private:
+            await self.bot.api.post_private_msg(
+                user_id=self.msg.user_id,
+                text=content
+            )
+        else:
+            await self.bot.api.post_group_msg(
+                group_id=self.msg.group_id,
+                text=content
+            )
+        logger.info(f"已回复{'用户' if self.is_private else '群'} "
+                    f"{self.msg.user_id if self.is_private else self.msg.group_id} 的文本消息: {content}")
+
+    # 图片
+    async def image(self, path: str):
+        if self.is_private:
+            await self.bot.api.post_private_msg(
+                user_id=self.msg.user_id,
+                image=path
+            )
+        else:
+            await self.bot.api.post_group_msg(
+                group_id=self.msg.group_id,
+                image=path
+            )
+        logger.info(f"已回复{'用户' if self.is_private else '群'} "
+                    f"{self.msg.user_id if self.is_private else self.msg.group_id}，图片路径为: {path}")
+
+    # 语音
+    async def record(self, path: str):
+        if self.is_private:
+            await self.bot.api.send_private_record(
+                user_id=self.msg.user_id,
+                file=path
+            )
+        else:
+            await self.bot.api.send_group_record(
+                group_id=self.msg.group_id,
+                file=path
+            )
+        logger.info(f"已回复{'用户' if self.is_private else '群'} "
+                    f"{self.msg.user_id if self.is_private else self.msg.group_id}，语音路径为: {path}")
+
+
 class BotManager:
     def __init__(self, bot: BotClient):
         self.bot = bot  # BotClient 实例
         self.sessions: Dict[str, ChatSession] = {}  # 统一存储所有会话，key是 "group_111" 或 "private_111" 以防冲突
+        self.sender: MessageSender | None = None  # 当前消息的 sender 对象，后续发送消息都通过它来调用 API
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -72,6 +125,7 @@ class BotManager:
         logger.info(f"收到{'私聊' if is_private else '群【' + session_id + '】'}消息: {user_text}")
         session = self.get_session(session_id, is_private)  # 获取或创建会话
         session.session_id = session_id  # 确保会话 ID 是最新的
+        self.sender = MessageSender(self.bot, msg)  # 统一 sender 对象，后续发送消息都通过它来调用 API
 
         if not user_text:
             return
@@ -81,61 +135,43 @@ class BotManager:
         if await self._handle_commands(msg, session):
             return
 
-        # if user_text == "一图":
-        #     random_path = session.random_picture.get_random_image_path()
-        #     # print(f"随机选取的图片路径是: {random_path}")
-        #     if is_private:
-        #         await self.bot.api.post_private_msg(user_id=msg.user_id, image=random_path)
-        #         logger.info(f"已回复用户 {msg.user_id} 的随机图片, 路径: {random_path}")
-        #     else:
-        #         await self.bot.api.post_group_msg(group_id=msg.group_id, text=f"呐呐呐~coins-5")
-        #         await self.bot.api.post_group_msg(group_id=msg.group_id, image=random_path)
-        #         logger.info(f"已回复群 {msg.group_id} 的随机图片, 路径: {random_path}")
-        #     return
+        # --- 2. 使用统一的判断函数 ---
+        should_reply = await self.__should_reply(session, user_text, is_private)
 
-        # 判定是否回复：先用assets/config/QQ_reply_settings.yaml判黑/白名单。
-        # 再看回复类型，私聊默认回复，群聊由 decider 判定
-        # should_reply = True if is_private else session.reply_decider.check_if_should_reply(user_text)
-        # can_reply = session.qq_reply_settings.can_reply(msg.group_id if not is_private else msg.user_id, is_private)
-        # if not can_reply:
-        #     should_reply = False  # 黑名单用户/群不回复
-        # elif is_private:
-        #     should_reply = True  # 私聊除非被拉黑，不然就默认回复
-        # else:
-        #     should_reply = session.reply_decider.check_if_should_reply(user_text)  # 群聊还要由模型判定是否回复
-
-        should_reply = await self.__should_reply(session, user_text, is_private)  # 使用统一的判断函数
-
-        if should_reply:
-            ai_reply = await session.get_reply(user_text)  # 生成回复
-            emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
-            # voice_decider = VoiceDecider(Path(VOICE_DIR) / f"{current_role.name_en}/description.csv")  # 初始化匹配器
-            # voice_path = voice_decider.match(ai_reply, threshold=0.712)
-            # if voice_path:
-            #     voice_path = str(Path(VOICE_DIR) / f"{current_role.name_en} / voice_path")  # 获取语音路径
-            # 根据消息类型调用不同 API
-            if is_private:
-                await self.bot.api.post_private_msg(user_id=msg.user_id, text=ai_reply)
-                if emoji_path:
-                    await self.bot.api.post_private_msg(user_id=msg.user_id, image=emoji_path)
-                # if voice_path:
-                #     await bot.api.send_private_record(user_id=msg.user_id, file=voice_path)
-                # record_path = "G:/Projects/py/MMT/assets/voice/Shiroko/0076.wav"
-                # record_path = "F:/Audio/Music/流光协奏演唱会版《为了你唱下去》编曲扒带(BV1xNsLzaEQ7).mp3"
-                # await bot.api.send_private_record(user_id=msg.user_id, file=record_path)
-                logger.info(f"已回复用户 {msg.user_id} 的私聊消息")
-            else:
-                await self.bot.api.post_group_msg(group_id=msg.group_id, text=ai_reply)
-                if emoji_path:
-                    await self.bot.api.post_group_msg(group_id=msg.group_id, image=emoji_path)
-                # if voice_path:
-                #     await bot.api.send_group_record(group_id=msg.group_id, file=voice_path)
-                # record_path = "F:/Audio/Music/洛天依 - 为了你唱下去_EM.flac"
-                # await bot.api.send_group_record(group_id=msg.group_id, file=record_path)
-                logger.info(f"已回复群 {msg.group_id} 的消息")
-
-        else:
+        if not should_reply:
             logger.info(f"决定不回复这条消息: {user_text}")
+            return
+
+        ai_reply = await session.get_reply(user_text)  # 生成回复
+        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
+        # voice_decider = VoiceDecider(Path(VOICE_DIR) / f"{current_role.name_en}/description.csv")  # 初始化匹配器
+        # voice_path = voice_decider.match(ai_reply, threshold=0.712)
+        # if voice_path:
+        #     voice_path = str(Path(VOICE_DIR) / f"{current_role.name_en} / voice_path")  # 获取语音路径
+        # # 根据消息类型调用不同 API
+        # if is_private:
+        #     await self.bot.api.post_private_msg(user_id=msg.user_id, text=ai_reply)
+        #     if emoji_path:
+        #         await self.bot.api.post_private_msg(user_id=msg.user_id, image=emoji_path)
+        #     # if voice_path:
+        #     #     await bot.api.send_private_record(user_id=msg.user_id, file=voice_path)
+        #     # record_path = "G:/Projects/py/MMT/assets/voice/Shiroko/0076.wav"
+        #     # record_path = "F:/Audio/Music/流光协奏演唱会版《为了你唱下去》编曲扒带(BV1xNsLzaEQ7).mp3"
+        #     # await bot.api.send_private_record(user_id=msg.user_id, file=record_path)
+        #     logger.info(f"已回复用户 {msg.user_id} 的私聊消息")
+        # else:
+        #     await self.bot.api.post_group_msg(group_id=msg.group_id, text=ai_reply)
+        #     if emoji_path:
+        #         await self.bot.api.post_group_msg(group_id=msg.group_id, image=emoji_path)
+        #     # if voice_path:
+        #     #     await bot.api.send_group_record(group_id=msg.group_id, file=voice_path)
+        #     # record_path = "F:/Audio/Music/洛天依 - 为了你唱下去_EM.flac"
+        #     # await bot.api.send_group_record(group_id=msg.group_id, file=record_path)
+        #     logger.info(f"已回复群 {msg.group_id} 的消息")
+        await self.sender.text(ai_reply)  # 先发送文本回复
+        if emoji_path:
+            await self.sender.image(emoji_path)  # 如果有表情路径，再发送表情
+        # todo 语音回复
 
     async def _handle_commands(self, msg: Union[GroupMessage, PrivateMessage], session) -> bool:
         """
@@ -145,19 +181,35 @@ class BotManager:
         user_text = msg.raw_message.strip()
         is_private = isinstance(msg, PrivateMessage)
 
-        # --- 指令1：一图 ---
-        if user_text == "一图":
-            random_path = session.random_picture.get_random_image_path()
+        # --- 指令1：一图 ---可以以一图开始，比如指令“一图 -n 5”表示发5张图，默认发1张
+        if user_text == "一图" or user_text.startswith("一图 "):
+            # 解析指令参数，目前仅支持“-n 数字”来指定图片数量，默认1张
+            pic_nums = 1  # default
+            if user_text.startswith("一图 "):
+                parts = user_text.split()
+                if len(parts) >= 3 and parts[1] == "-n" and parts[2].isdigit():
+                    pic_nums = max(1, min(int(parts[2]), 3))
+                else:
+                    pic_nums = 1  # 如果参数不正确，默认发1张图
 
-            if is_private:
-                await self.bot.api.post_private_msg(user_id=msg.user_id, image=random_path)
-            else:
-                # 群聊逻辑
-                await self.bot.api.post_group_msg(group_id=msg.group_id, text="呐呐呐~coins-5")
-                await self.bot.api.post_group_msg(group_id=msg.group_id, image=random_path)
+            for i in range(pic_nums):
+                random_path = session.random_picture.get_random_image_path()
+                if i == 0:
+                    await self.sender.text(f"呐呐呐~coins-{5 * pic_nums}")  # 首次发文本提示扣除金币，后续只发图
+                    # todo 实际扣除金币逻辑
+                await self.sender.image(random_path)  # 发送图片
 
-            target_id = msg.user_id if is_private else msg.group_id
-            logger.info(f"已回复{'用户' if is_private else '群'} {target_id} 的随机图片: {random_path}")
+            #     if is_private:
+            #         if i == 0:  # 只有第一张图前面发 coins-5 的文本，后续图片只发图
+            #             await self.bot.api.post_private_msg(user_id=msg.user_id, text=f"呐呐呐~coins-{5 * pic_nums}")
+            #         await self.bot.api.post_private_msg(user_id=msg.user_id, image=random_path)
+            #     else:
+            #         if i == 0:  # 只有第一张图前面发 coins-5 的文本，后续图片只发图
+            #             await self.bot.api.post_group_msg(group_id=msg.group_id, text=f"呐呐呐~coins-{5 * pic_nums}")
+            #         await self.bot.api.post_group_msg(group_id=msg.group_id, image=random_path)
+            #
+            #     target_id = msg.user_id if is_private else msg.group_id
+            # logger.info(f"已回复{'用户' if is_private else '群'} {target_id} 的随机图片: {random_path}")
             return True
 
         # --- 指令2：唱歌 ---
@@ -166,12 +218,49 @@ class BotManager:
             record_path = await self.__find_music_file(song_name)
             print(f"歌曲名: '{song_name}'，音乐文件路径是: {record_path}")
             if record_path:
-                if is_private:
-                    await self.bot.api.send_private_record(user_id=msg.user_id, file=record_path)
-                else:
-                    await self.bot.api.send_group_record(group_id=msg.group_id, file=record_path)
+                await self.sender.record(record_path)
+                # if is_private:
+                #     await self.bot.api.send_private_record(user_id=msg.user_id, file=record_path)
+                # else:
+                #     await self.bot.api.send_group_record(group_id=msg.group_id, file=record_path)
             else:
+                await self.sender.text(f"抱歉，天依还不会唱{song_name}这首歌呢~你可以教教天依吗(>_<)")
                 logger.warning(f"未找到匹配的音乐文件，无法满足用户的唱歌请求: '{song_name}'")
+            return True
+
+        # --- 指令3：帮助 ---
+        if user_text.lower() in ["help", "帮助", "菜单", "功能"]:
+            help_text = """꧁ 华风夏韵，洛水天依 ꧂
+  ♾️ 这里是天依，请多指教(,,>᎑<,,)
+  🎨 图片小惊喜：
+    -> 发送「一图」 → 天依会送你一张可爱的图片哦~ 如果想看更多，试试「一图 -n 2」，可以一次看到两张呢~
+  🎤 为了你唱下去：
+    -> 发送「唱+歌名」 → 天依来为你唱这首歌（比如：唱为了你唱下去）
+  📋 小说明：
+    -> 私聊的话，天依一定会好好地回应你哟(♡>𖥦<)/♡ 群聊里除了这些特别的指令，天依还在努力学习，希望能更好地陪着你(◔◡◔)
+    -> 如果遇到什么问题，可以找我的好朋友virtual小满，她会帮你哒(⑅˃◡˂⑅)
+  ❤️ （轻轻歪头，眼里闪着温暖的光）诶嘿~天依虽然是纸片人，但通过歌声和大家的爱，真的能变得更有温度呢！天依会一直一直在这里，陪着你，唱歌给大家听的(๑>؂<๑）"""
+            await self.sender.text(help_text)
+            return True
+
+        # --- 指令4：群打卡/签到 ---todo 应该只支持群聊，私聊不处理
+        if user_text == "打卡":
+            try:
+                await bot_client.api.set_group_sign(
+                    group_id=msg.group_id
+                )
+
+                await bot_client.api.post_group_msg(
+                    group_id=msg.group_id,
+                    text="群签到完成~"
+                )
+                logger.info(f"已完成群 {msg.group_id} 的签到")
+            except Exception as e:
+                logger.error(f"群签到失败: {e}")
+                await bot_client.api.post_group_msg(
+                    group_id=msg.group_id,
+                    text=f"签到失败了呢...{e}"
+                )
             return True
 
         return False
