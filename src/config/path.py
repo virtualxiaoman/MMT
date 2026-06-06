@@ -7,6 +7,7 @@ PROMPT_DIR = ASSETS_DIR / "prompt"
 CONFIG_DIR = ASSETS_DIR / "config"
 EMOJI_DIR = ASSETS_DIR / "emoji"
 VOICE_DIR = ASSETS_DIR / "voice"
+QQ_BOT_INFO_DIR = CONFIG_DIR / "QQ_bot_info"
 
 # print(f"项目根目录: {PROJECT_ROOT}")
 # print(f"资源目录: {ASSETS_DIR}")

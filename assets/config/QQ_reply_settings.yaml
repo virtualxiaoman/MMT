@@ -12,7 +12,7 @@ QQ:
       whitelist: [ *master_admin_private, 1291606697 ]      # 白名单，优先级高于黑名单
       blacklist: *global_blacklist_private  # 黑名单，优先级低于白名单
     group: # 群聊设置
-      mode: "auto"      # 同上
+      mode: "false"      # 同上
       whitelist: [ *master_admin_group, 808373730 ]  # 群白名单，优先级高于群黑名单
       blacklist: [*global_blacklist_group]  # 群黑名单，优先级低于群白名单
   "1291606697": # 机器人QQ号
