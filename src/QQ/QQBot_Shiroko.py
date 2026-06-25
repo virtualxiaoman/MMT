@@ -8,10 +8,10 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage  # 导入 Priva
 from src.config.cur_role import current_role
 from src.config.path import VOICE_DIR
 from src.utils.chat.role_chat import ChatDSAPI
-from src.utils.chat.reply_decider import ReplyDecider
-from src.utils.chat.emoji_decider import EmojiDecider
-from src.utils.chat.voice_decider import VoiceDecider
-from src.utils.tools.rand_pic import RandomPicture
+from src.utils.chat.decider.reply_decider import ReplyDecider
+from src.utils.chat.decider.emoji_decider import EmojiDecider
+from src.utils.chat.decider.voice_decider import VoiceDecider
+from src.utils.tools.resource_management.rand_pic import RandomPicture
 
 # todo 戳一戳 https://github.com/liyihao1110/ncatbot/issues/231
 

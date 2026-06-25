@@ -1,19 +1,25 @@
 import logging
+import time
 from typing import Dict
 
-from ncatbot.core import BotClient, GroupMessage, PrivateMessage  # 导入 PrivateMessage
+from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
-    CheckinCommand
+    CheckinCommand, LyricCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession
+from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
+from src.QQ.QQutils.msg.process_img import MessageNormalizer
 from src.QQ.QQutils.msg.send_msg import MessageSender, MessageContext
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
+from src.utils.chat.img_describer import ImageDescriber
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # 配置
 CONFIG = BotInfoConfigLoader.load("LuoTianyi")
+
+
 # # 配置
 # BOT_NAME = "天依"
 # BOT_QQ_ID = 1121221045
@@ -29,11 +35,15 @@ class BotManager:
         self.sessions: Dict[str, ChatSession] = {}  # 统一存储所有会话，key是 "group_111" 或 "private_111" 以防冲突
         self.msg_sender: MessageSender | None = None  # 当前消息的 sender 对象，后续发送消息都通过它来调用 API
 
+        self.image_describer = ImageDescriber()
+        self.message_normalizer = MessageNormalizer(self.image_describer)
+
         self.registry = CommandRegistry()
         self.registry.register(ImageCommand())
         self.registry.register(MusicCommand(CONFIG.paths.music_dirs))
         self.registry.register(HelpCommand())
         self.registry.register(CheckinCommand())
+        self.registry.register(LyricCommand(CONFIG.paths.lyric_dirs))
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -43,21 +53,37 @@ class BotManager:
             self.sessions[key] = ChatSession(session_id, is_private, CONFIG)
         return self.sessions[key]
 
-    async def handle_message(self, msg):
+    async def handle_message(self, msg: PrivateMessage | GroupMessage):
         """
         统一处理群聊和私聊消息
         """
-        user_text = msg.raw_message.strip()
+        # user_raw_text = msg.raw_message.strip()
+        # print(msg)
         is_private = isinstance(msg, PrivateMessage)
         session_id = str(msg.user_id if is_private else msg.group_id)
         session = self.get_session(session_id, is_private)
         session.session_id = session_id
-        logger.info(
-            f"收到消息 type={'private' if is_private else 'group'} "
-            f"id={session_id} text={user_text}"
-        )
-        if not user_text:
+        logger.info(f"收到消息 type={'private' if is_private else 'group'}, id={session_id}")
+        # if not user_raw_text:
+        #     return  # 个人觉得空格也不应该被直接丢弃
+
+        # user_raw_text = (
+        #     self.message_normalizer
+        #     .normalize(msg)
+        #     .strip()
+        # )
+        # print(user_raw_text)
+
+        # =========================
+        # 1. 是否能回复（不在黑名单里）
+        # =========================
+        can_reply = await self._can_reply(session, is_private)
+        if not can_reply:
+            logger.info(f"黑名单用户/群不回复")
             return
+
+        message_wrapper = MessageWrapper(msg)
+        print(f"原始消息：{message_wrapper.raw_msg}\nLLM输入消息：{message_wrapper.text_msg}")
 
         msg_sender = MessageSender(self.bot, msg)
         ctx = MessageContext(
@@ -65,7 +91,7 @@ class BotManager:
             msg=msg,
             session=session,
             msg_sender=msg_sender,
-            user_text=user_text,
+            user_raw_text=message_wrapper.text_msg,
             is_private=is_private,
             session_id=session_id
         )
@@ -80,13 +106,12 @@ class BotManager:
         # =========================
         # 2. 判断是否回复
         # =========================
-        should_reply = await self.__should_reply(session, user_text, is_private)
-
+        should_reply = await self._should_reply(session, message_wrapper.text_msg, is_private)
         if not should_reply:
-            logger.info(f"决定不回复这条消息: {user_text}")
+            logger.info(f"决定不回复这条消息")
             return
 
-        ai_reply = await session.get_reply(user_text)  # 生成回复
+        ai_reply = await session.get_reply(message_wrapper.text_msg)  # 生成回复
         emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
 
         await msg_sender.text(ai_reply)  # 先发送文本回复
@@ -207,18 +232,24 @@ class BotManager:
     #
     #       return False
 
-    async def __should_reply(self, session: ChatSession, user_text: str, is_private: bool) -> bool:
+    async def _can_reply(self, session: ChatSession, is_private: bool) -> bool:
+        """
+        用assets/config/QQ_reply_settings.yaml判黑/白名单。
+        :param session: 对话
+        :param is_private:
+        :return:
+        """
+        return session.qq_reply_settings.can_reply(session.session_id, is_private)
+
+    async def _should_reply(self, session: ChatSession, user_raw_text: str, is_private: bool) -> bool:
         """
         判定是否回复：
-          1. 先用assets/config/QQ_reply_settings.yaml判黑/白名单。
+          1. 先
           2. 再看回复类型，私聊默认回复，群聊由 decider 判定
         """
-        can_reply = session.qq_reply_settings.can_reply(session.session_id, is_private)
-        if not can_reply:
-            return False  # 黑名单用户/群不回复
         if is_private:
             return True  # 私聊除非被拉黑，不然就默认回复
-        return session.reply_decider.check_if_should_reply(user_text)  # 群聊还要由模型判定是否回复
+        return session.reply_decider.check_if_should_reply(user_raw_text)  # 群聊还要由模型判定是否回复
 
 
 # ========== 运行部分 ==========

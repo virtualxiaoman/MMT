@@ -1,8 +1,8 @@
-from pathlib import Path
 import logging
 # todo 帮助只实现了洛天依的部分，可以考虑单独写一个类来自定义
 from src.QQ.QQutils.msg.send_msg import MessageContext
-from src.utils.tools.specify_music import MusicRepository
+from src.utils.tools.resource_management.specify_lyric import LyricRepository
+from src.utils.tools.resource_management.specify_music import MusicRepository
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -25,19 +25,18 @@ class CommandRegistry:
 
     async def dispatch(self, ctx: MessageContext) -> bool:
         for cmd in self.commands:
-            if cmd.match(ctx.user_text):
+            if cmd.match(ctx.user_raw_text):
                 return await cmd.handle(ctx)
         return False
 
 
 # --- 指令1：一图 ---可以以一图开始，比如指令“一图 -n 5”表示发5张图，默认发1张
 class ImageCommand(BaseCommand):
-
     def match(self, text: str) -> bool:
         return text == "一图" or text.startswith("一图 ")
 
     async def handle(self, ctx: MessageContext) -> bool:
-        user_text = ctx.user_text
+        user_text = ctx.user_raw_text
         pic_nums = 1  # default
         # 解析指令参数，目前仅支持“-n 数字”来指定图片数量，默认1张
         if user_text.startswith("一图 "):
@@ -64,7 +63,7 @@ class MusicCommand(BaseCommand):
         return text.startswith("唱") and len(text) > 1
 
     async def handle(self, ctx: MessageContext) -> bool:
-        song_name = ctx.user_text[1:].strip()
+        song_name = ctx.user_raw_text[1:].strip()
         music_finder = MusicRepository(
             song_name=song_name,
             music_dirs=self.music_dir
@@ -126,7 +125,6 @@ class HelpCommand(BaseCommand):
 
 # --- 指令4：群打卡/签到 ---
 class CheckinCommand(BaseCommand):
-
     def match(self, text: str) -> bool:
         return text == "打卡"
 
@@ -145,4 +143,19 @@ class CheckinCommand(BaseCommand):
             logger.error(f"群签到失败: {e}")
             await ctx.msg_sender.text(f"签到失败了呢...")
 
+        return True
+
+
+class LyricCommand(BaseCommand):
+    def __init__(self, lyric_dir: str | list):
+        self.repository = LyricRepository(lyric_dir)
+
+    def match(self, text: str) -> bool:
+        return True
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        result = self.repository.find_next_line(ctx.user_raw_text)
+        if result is None:
+            return False
+        await ctx.msg_sender.text(result)
         return True

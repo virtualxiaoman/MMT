@@ -3,10 +3,10 @@ import logging
 
 from src.config.QQ_bot_info_loader import BotConfig
 from src.config.QQ_reply_settings import QQReplySettings
-from src.utils.chat.emoji_decider import EmojiDecider
-from src.utils.chat.reply_decider import ReplyDecider
+from src.utils.chat.decider.emoji_decider import EmojiDecider
+from src.utils.chat.decider.reply_decider import ReplyDecider
 from src.utils.chat.role_chat import ChatDSAPI
-from src.utils.tools.rand_pic import RandomPicture
+from src.utils.tools.resource_management.rand_pic import RandomPicture
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

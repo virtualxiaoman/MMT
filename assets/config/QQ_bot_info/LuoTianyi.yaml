@@ -7,3 +7,6 @@ paths:
 
   random_picture_dirs:
     - F:/Picture/pixiv/LuoTianyi
+
+  lyric_dirs:
+    - F:/Audio/Music/Lyric/LuoTianYi

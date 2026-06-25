@@ -69,6 +69,6 @@ class MessageContext:
     session: "ChatSession"
     msg_sender: "MessageSender"
 
-    user_text: str
+    user_raw_text: str
     is_private: bool
     session_id: str

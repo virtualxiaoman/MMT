@@ -354,6 +354,11 @@ class QQReplyConfigReLoader:
             return bots[bot_id]
         return bots.get("default", {})
 
+    # ===== 读取公共配置 =====
+    def get_common_parts(self):
+        self.reload()
+        return self._config.get("common_parts", {})
+
 
 class QQReplySettings:
     """权限校验"""
@@ -362,8 +367,13 @@ class QQReplySettings:
         self.bot_id = str(bot_id)
         self.reply_settings = QQReplyConfigReLoader()
 
-    def _check_access(self, conf: dict, target_id: int) -> bool:
+    def _check_access(self, conf: dict, target_id: int, super_whitelist: int | None = None) -> bool:
         """内部通用逻辑判断"""
+        # ===== 管理员永远允许 =====
+        if super_whitelist is not None and target_id == super_whitelist:
+            print(f"[QQReplySettings] {target_id} 是管理员对象，强制允许访问")
+            return True
+
         mode = str(conf.get("mode", "auto")).lower()
 
         # 1. 强制开关判断
@@ -396,7 +406,9 @@ class QQReplySettings:
         """
         bot_conf = self.reply_settings.get_bot_config(self.bot_id)
         private_conf = bot_conf.get("private", {})
-        return self._check_access(private_conf, user_id)
+        common_parts = self.reply_settings.get_common_parts()
+        admin_qq = int(common_parts.get("admin_qq", -1))
+        return self._check_access(conf=private_conf, target_id=user_id, super_whitelist=admin_qq)
 
     def can_reply_group(self, group_id: int) -> bool:
         """
@@ -405,7 +417,9 @@ class QQReplySettings:
         """
         bot_conf = self.reply_settings.get_bot_config(self.bot_id)
         group_conf = bot_conf.get("group", {})
-        return self._check_access(group_conf, group_id)
+        common_parts = self.reply_settings.get_common_parts()
+        admin_group = int(common_parts.get("admin_group", -1))
+        return self._check_access(conf=group_conf, target_id=group_id, super_whitelist=admin_group)
 
     def can_reply(self, session_id, is_private: bool) -> bool:
         """

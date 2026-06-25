@@ -24,19 +24,40 @@ class ReplyDecider:
             self.model_name = model_settings.decide.get("name")
         else:
             self.model_name = model_name
+        prompt = f"""你是一个专门用于判断群聊消息是否需要用户回复的AI助手。
+该用户的名字是 "{self.name}"。
+请仔细阅读给出的群聊消息上下文，并判断用户是否应该在此时发言。
+判断规则：
+1. 如果最新消息明确提到了该用户（昵称、名字、@等），输出 True。
+2. 如果最新消息是在向该用户提问、请求帮助、等待该用户回应，输出 True。
+3. 如果该用户之前参与了当前话题，而其他成员正在回复该用户的内容，输出 True。
+4. 如果该用户长时间未发言，但当前话题与该用户明显相关，且能够自然参与讨论，可输出 True。
+5. 对于普通闲聊、群成员之间的对话、与该用户无关的话题，输出 False。
+6. 不要为了维持活跃度而主动发言。
+7. 不要因为聊天进行了若干条消息就自动加入。
+8. 除非存在明确的发言理由，否则默认输出 False。
+9. 宁可错过一次发言机会，也不要频繁打扰群聊。
+10. 当无法确定是否应该发言时，优先输出 False。
+输出要求：
+只能输出：
+True
+或
+False
+不要输出任何其他内容。"""
         # 初始化多轮对话的历史记忆，系统提示词定调
         self.history = [
             {
                 "role": "system",
                 "content": (
-                    f"你是一个专门用于判断群聊消息是否需要用户回复的AI助手。该用户的名字是 '{self.name}'。"
-                    "仔细阅读给出的群聊消息上下文。"
-                    "如果最新的一条消息是向该用户对话、或者结合上下文判断应该需要该用户参与和回复，请严格输出 'True'。"
-                    "对于其他人的闲聊，可以判断时机适时加入话题中，此时请严格输出 'True'。"
-                    "但如果不需要该用户插话，请严格输出 'False'。"
-                    "一般而言当其他人聊5~8句你就可以适当加入一次（严格输出 'True'），保持活跃度."
-                    "但也不要过于频繁以免打扰別人了。也就是除非你觉得非常有必要，否则不要连续回复（严格输出 'False'）。"
-                    "注意：你的回复只能包含 'True' 或 'False'，不要输出任何额外的标点符号、解释或说明。"
+                    prompt
+                    # f"你是一个专门用于判断群聊消息是否需要用户回复的AI助手。该用户的名字是 '{self.name}'。"
+                    # "仔细阅读给出的群聊消息上下文。"
+                    # "如果最新的一条消息是向该用户对话、或者结合上下文判断应该需要该用户参与和回复，请严格输出 'True'。"
+                    # "对于其他人的闲聊，可以判断时机适时加入话题中，此时请严格输出 'True'。"
+                    # "但如果不需要该用户插话，请严格输出 'False'。"
+                    # "一般而言当其他人聊5~8句你就可以适当加入一次（严格输出 'True'），保持活跃度."
+                    # "但也不要过于频繁以免打扰別人了。也就是除非你觉得非常有必要，否则不要连续回复（严格输出 'False'）。"
+                    # "注意：你的回复只能包含 'True' 或 'False'，不要输出任何额外的标点符号、解释或说明。"
                 )
             }
         ]
@@ -74,6 +95,7 @@ class ReplyDecider:
         传入最新的一条消息，存入历史记录，并调用大模型判断是否需要回复
         """
         # return False
+        # print(user_text)
         if not user_text:
             return False
         if user_text in NO_REPLY_MESSAGES:
@@ -82,15 +104,20 @@ class ReplyDecider:
         # 1. 将最新的群聊消息加入历史记忆
         self.history.append({
             "role": "user",
-            "content": f"最新群聊消息：{user_text}"
+            "content": f"最新群聊消息：{user_text}"  # todo: 加入发送者
         })
 
         # 2. 检测文本中是否含有字符串"[CQ:at,qq=self.qq_id]"，如果有则直接返回 True
-        if f"[CQ:at,qq={self.qq_id}]" in user_text:
+        if (
+                f"@{self.qq_id}" in user_text
+                or f"[CQ:at,qq={self.qq_id}]" in user_text
+                or f'At(qq="{self.qq_id}")' in user_text
+        ):
             self.history.append({
                 "role": "assistant",
                 "content": "True"
             })
+            print(f"[ReplyDecider] 消息 @了{self.qq_id}，直接返回 True")
             return True
 
         try:

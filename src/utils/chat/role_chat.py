@@ -122,11 +122,15 @@ class ChatDSAPI(Chat):
             else:
                 self.model_name = "deepseek-chat"  # 默认使用 deepseek-chat 模型，确保兼容性
         else:
+            # todo: deepseek-chat 与 deepseek-reasoner 两个模型名将于北京时间 2026/07/24 23:59 弃用。
+            #  出于兼容考虑，二者分别对应 deepseek-v4-flash 的非思考与思考模式。
             if model_name in {"deepseek-chat", "deepseek-reasoner"}:  # 注意这里暂不支持deepseek-reasoner，但先这样写
                 self.model_name = model_name
             else:
                 print(f"不支持的模型名称 {model_name}，默认使用 deepseek-chat")
                 self.model_name = "deepseek-chat"
+
+        self.model_name = "deepseek-v4-pro"  # todo: 这里直接写死
 
         if api_path is None:
             api_path = Path(API_KEY_DIR) / "deepseek.txt"

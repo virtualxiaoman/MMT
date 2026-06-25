@@ -9,6 +9,7 @@ from src.config.path import QQ_BOT_INFO_DIR
 class BotPaths:
     music_dirs: list[str] = field(default_factory=list)
     random_picture_dirs: list[str] = field(default_factory=list)
+    lyric_dirs: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,8 @@ class BotInfoConfigLoader:
 
         paths = BotPaths(
             music_dirs=list(paths_data.get("music_dirs", [])),
-            random_picture_dirs=list(paths_data.get("random_picture_dirs", []))
+            random_picture_dirs=list(paths_data.get("random_picture_dirs", [])),
+            lyric_dirs=list(paths_data.get("lyric_dirs", []))
         )
 
         return BotConfig(
@@ -47,10 +49,11 @@ class BotInfoConfigLoader:
 
 
 if __name__ == "__main__":
-    config = BotConfigLoader.load("LuoTianyi")
+    config = BotInfoConfigLoader.load("LuoTianyi")
 
     print(config.name)
     print(config.qq_id)
 
     print(config.paths.music_dirs)
     print(config.paths.random_picture_dirs)
+    print(config.paths.lyric_dirs)
