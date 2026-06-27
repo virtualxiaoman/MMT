@@ -226,3 +226,36 @@ class ChatKimiAPI(Chat):
             "content": result
         })
         return result
+
+
+class DeepSeekClient:
+
+    def __init__(
+            self,
+            model="deepseek-v4-pro",
+            base_url="https://api.deepseek.com",
+            api_path=None
+    ):
+        if api_path is None:
+            api_path = Path(API_KEY_DIR) / "deepseek.txt"
+
+        self.model = model
+
+        self.client = OpenAI(
+            api_key=load_from_txt(api_path),
+            base_url=base_url
+        )
+
+    def one_chat(
+            self,
+            messages,
+            temperature=1.0
+    ):
+        completion = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            stream=False
+        )
+
+        return completion.choices[0].message.content

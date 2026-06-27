@@ -5,7 +5,7 @@ from typing import Dict
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
-    CheckinCommand, LyricCommand
+    CheckinCommand, LyricCommand, DailyReportCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession
 from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
@@ -13,6 +13,7 @@ from src.QQ.QQutils.msg.send_msg import MessageSender, MessageContext
 from src.QQ.QQutils.resource_management.history_storage import HistoryLogger
 from src.QQ.QQutils.resource_management.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
+
 # from src.utils.chat.img_describer import ImageDescriber
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -48,6 +49,7 @@ class BotManager:
         self.registry.register(HelpCommand())
         self.registry.register(CheckinCommand())
         self.registry.register(LyricCommand(CONFIG.paths.lyric_dirs))
+        self.registry.register(DailyReportCommand())
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -99,7 +101,9 @@ class BotManager:
             msg_sender=msg_sender,
             user_raw_text=msg.raw_message.strip(),  # todo： 因为接口变动，工具类暂不使用message_wrapper.text_msg
             is_private=is_private,
-            session_id=session_id
+            session_id=session_id,
+            message_wrapper=message_wrapper,
+            config=CONFIG
         )
 
         # =========================

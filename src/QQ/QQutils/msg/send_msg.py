@@ -5,6 +5,8 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage, GroupMessageEv
 import logging
 
 from src.QQ.QQutils.msg.chat_session import ChatSession
+from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
+from src.config.QQ_bot_info_loader import BotConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -68,7 +70,10 @@ class MessageContext:
     msg: Union[GroupMessage, PrivateMessage]
     session: "ChatSession"
     msg_sender: "MessageSender"
-
+    message_wrapper: "MessageWrapper"
+    config: "BotConfig"
     user_raw_text: str
     is_private: bool
     session_id: str
+
+

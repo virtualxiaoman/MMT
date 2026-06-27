@@ -10,6 +10,7 @@ CONFIG_DIR = ASSETS_DIR / "config"
 EMOJI_DIR = ASSETS_DIR / "emoji"
 VOICE_DIR = ASSETS_DIR / "voice"
 HISTORY_DIR = ASSETS_DIR / "history"
+PICTURES_DIR = ASSETS_DIR / "pictures"
 
 QQ_BOT_INFO_DIR = CONFIG_DIR / "QQ_bot_info"
 
