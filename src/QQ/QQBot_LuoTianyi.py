@@ -8,10 +8,12 @@ from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCom
     CheckinCommand, LyricCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession
 from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
-from src.QQ.QQutils.msg.process_img import MessageNormalizer
+# from src.QQ.QQutils.msg.process_img import MessageNormalizer
 from src.QQ.QQutils.msg.send_msg import MessageSender, MessageContext
+from src.QQ.QQutils.resource_management.history_storage import HistoryLogger
+from src.QQ.QQutils.resource_management.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
-from src.utils.chat.img_describer import ImageDescriber
+# from src.utils.chat.img_describer import ImageDescriber
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -34,9 +36,11 @@ class BotManager:
         self.bot = bot  # BotClient 实例
         self.sessions: Dict[str, ChatSession] = {}  # 统一存储所有会话，key是 "group_111" 或 "private_111" 以防冲突
         self.msg_sender: MessageSender | None = None  # 当前消息的 sender 对象，后续发送消息都通过它来调用 API
+        self.image_storage = ImageStorage(bot_id=CONFIG.qq_id)
+        self.history_logger = HistoryLogger(CONFIG)
 
-        self.image_describer = ImageDescriber()
-        self.message_normalizer = MessageNormalizer(self.image_describer)
+        # self.image_describer = ImageDescriber()
+        # self.message_normalizer = MessageNormalizer(self.image_describer)
 
         self.registry = CommandRegistry()
         self.registry.register(ImageCommand())
@@ -84,6 +88,8 @@ class BotManager:
 
         message_wrapper = MessageWrapper(msg)
         print(f"原始消息：{message_wrapper.raw_msg}\nLLM输入消息：{message_wrapper.text_msg}")
+        message_wrapper = self.image_storage.process(message_wrapper)  # 保存图片
+        self.history_logger.append(msg, message_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
 
         msg_sender = MessageSender(self.bot, msg)
         ctx = MessageContext(
@@ -91,26 +97,29 @@ class BotManager:
             msg=msg,
             session=session,
             msg_sender=msg_sender,
-            user_raw_text=message_wrapper.text_msg,
+            user_raw_text=msg.raw_message.strip(),  # todo： 因为接口变动，工具类暂不使用message_wrapper.text_msg
             is_private=is_private,
             session_id=session_id
         )
 
         # =========================
-        # 1. 工具类指令
+        # 2. 工具类指令
         # =========================
         handled = await self.registry.dispatch(ctx)
         if handled:
             return
 
         # =========================
-        # 2. 判断是否回复
+        # 3. 判断是否回复
         # =========================
         should_reply = await self._should_reply(session, message_wrapper.text_msg, is_private)
         if not should_reply:
             logger.info(f"决定不回复这条消息")
             return
 
+        # =========================
+        # 4. 回复
+        # =========================
         ai_reply = await session.get_reply(message_wrapper.text_msg)  # 生成回复
         emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
 
@@ -236,16 +245,14 @@ class BotManager:
         """
         用assets/config/QQ_reply_settings.yaml判黑/白名单。
         :param session: 对话
-        :param is_private:
+        :param is_private: 是否是私聊
         :return:
         """
         return session.qq_reply_settings.can_reply(session.session_id, is_private)
 
     async def _should_reply(self, session: ChatSession, user_raw_text: str, is_private: bool) -> bool:
         """
-        判定是否回复：
-          1. 先
-          2. 再看回复类型，私聊默认回复，群聊由 decider 判定
+        判定是否回复：看回复类型，私聊默认回复，群聊由 decider 判定
         """
         if is_private:
             return True  # 私聊除非被拉黑，不然就默认回复

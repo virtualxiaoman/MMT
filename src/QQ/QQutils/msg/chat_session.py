@@ -17,9 +17,9 @@ class ChatSession:
         self.session_id = session_id
         self.is_private = is_private
         self.llm_chater = ChatDSAPI()  # 默认deepseek
-        self.reply_decider = ReplyDecider(name=config.name, qq_id=config.qq_id)
+        self.reply_decider = ReplyDecider(config)
         self.emoji_decider = EmojiDecider()
-        self.llm_chater.init_role(config.name)
+        self.llm_chater.init_role(config.name_zh)
         self.random_picture_provider = RandomPicture(config.paths.random_picture_dirs)
         self.qq_reply_settings = QQReplySettings(config.qq_id)
         logger.info(f"已为{'私聊' if is_private else '群聊'} {session_id} 初始化 AI 会话")

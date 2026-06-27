@@ -1,9 +1,14 @@
+import warnings
+from pathlib import Path
 import ollama
 import re
 import random
 
+from src.config.QQ_bot_info_loader import BotConfig
+from src.config.path import PROMPT_DIR
 from src.utils.chat.role_chat import ChatDSAPI
 from src.config.models import model_settings
+from src.utils.tools.file import load_from_txt
 
 NO_REPLY_MESSAGES = [
     "呐，Coins-5 ~",
@@ -12,26 +17,36 @@ NO_REPLY_MESSAGES = [
 
 
 class ReplyDecider:
-    def __init__(self, name, qq_id, model_name=None):
+    def __init__(self, config: BotConfig, model_name=None):
         """
         初始化判决器
         :param model_name: 本地部署的 ollama 模型名称
-        :param name: 你在群聊中的昵称或标识，帮助模型识别是否在叫你
         """
-        self.name = name
-        self.qq_id = qq_id
+        self.name_zh = config.name_zh
+        self.name_en = config.name_en
+        self.nickname = config.nickname
+        self.qq_id = config.qq_id
         if model_name is None:
             self.model_name = model_settings.decide.get("name")
         else:
             self.model_name = model_name
+
+        path = Path(PROMPT_DIR) / f"{self.name_en}.txt"
+        bot_role_prompt = ""
+        if not path.exists():
+            warnings.warn(f"角色设定提示词文件 {path} 不存在")
+        else:
+            bot_role_prompt = load_from_txt(path)
+
         prompt = f"""你是一个专门用于判断群聊消息是否需要用户回复的AI助手。
-该用户的名字是 "{self.name}"。
+该用户的名字是 "{self.name_zh}" 或者 "{self.name_en}"，昵称有{'、'.join(self.nickname)}"。
+其人设是{bot_role_prompt}
 请仔细阅读给出的群聊消息上下文，并判断用户是否应该在此时发言。
 判断规则：
 1. 如果最新消息明确提到了该用户（昵称、名字、@等），输出 True。
 2. 如果最新消息是在向该用户提问、请求帮助、等待该用户回应，输出 True。
 3. 如果该用户之前参与了当前话题，而其他成员正在回复该用户的内容，输出 True。
-4. 如果该用户长时间未发言，但当前话题与该用户明显相关，且能够自然参与讨论，可输出 True。
+4. 如果该用户长时间未发言，但当前话题与该用户明显相关（例如图片中的人物是该用户或者文字提及了该人物），且能够自然参与讨论，可输出 True。
 5. 对于普通闲聊、群成员之间的对话、与该用户无关的话题，输出 False。
 6. 不要为了维持活跃度而主动发言。
 7. 不要因为聊天进行了若干条消息就自动加入。
@@ -132,7 +147,7 @@ False
                     options=self.options_local
                 )
                 reply_content = response['message']['content']
-                print(f"[ReplyDecider-本地模型]{self.name}认为是否需要回复的原始模型输出: '{reply_content}'")
+                print(f"[ReplyDecider-本地模型]{self.name_zh}认为是否需要回复的原始模型输出: '{reply_content}'")
                 needs_reply = self._parse_response(reply_content)
                 # 4. 将助手的判断也存入历史，维持标准的多轮对话格式 (User -> Assistant -> User -> ...)
                 self.history.append({
@@ -146,7 +161,7 @@ False
                     print(f"[ReplyDecider-API模型]首次调用，正在将提示词传入 ChatDSAPI 实例...")
                     self.chat_ds.msg = self.history.copy()  # 将当前历史传入 ChatDSAPI 实例
                 reply_content = self.chat_ds.one_chat(user_text)
-                print(f"[ReplyDecider-API模型]{self.name}认为是否需要回复的原始模型输出: '{reply_content}'")
+                print(f"[ReplyDecider-API模型]{self.name_zh}认为是否需要回复的原始模型输出: '{reply_content}'")
                 needs_reply = self._parse_response(reply_content)
                 self.history = self.chat_ds.msg.copy()  # 将 ChatDSAPI 实例的历史覆盖回来，保持两者同步
 

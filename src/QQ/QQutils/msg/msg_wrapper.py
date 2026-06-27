@@ -40,7 +40,7 @@ class MessageWrapper:
                 reply_message_id = int(seg.id)
                 continue
             # Text
-            elif seg_type == "Text":
+            elif seg_type == "Text" or seg_type == "PlainText":
                 content = str(seg.text)
                 segments.append({
                     "index": len(segments),
@@ -60,7 +60,10 @@ class MessageWrapper:
                     "index": len(segments),
                     "type": "qq_face",
                     "face_id": str(seg.id),
-                    "content": getattr(seg, "faceText", "")  # todo: 经测试，始终是[表情]，后续应该修改为查表
+                    "content": getattr(seg, "faceText", "")  # todo: 经测试，始终是[表情]，后续应该修改为查表，如下：
+                    # https://koishi.js.org/QFace/#/qqnt
+                    # https://github.com/koishijs/QFace
+                    # https://koishi.js.org/QFace/assets/qq_emoji/_index.json
                 })
             # Image
             elif seg_type == "Image":
@@ -85,6 +88,7 @@ class MessageWrapper:
                         "url": getattr(seg, "url", ""),
                         "file": None
                     })
+            # todo 暂不支持文件
         return {
             "timestamp": getattr(msg, "time", int(time.time())),  # 时间戳，msg是有time属性的，这里只是以防万一
             "message_id": str(msg.message_id),
@@ -108,13 +112,12 @@ class MessageWrapper:
         使用VLM补全图片content
         """
         for seg in self.data["segments"]:
-            if seg["type"] != "image":
-                continue
-            try:
-                seg["content"] = self.image_describer.describe_img(seg["url"])
-            except Exception as e:
-                print(f"[MessageWrapper] 图片识别失败: {e}")
-                seg["content"] = None
+            if seg["type"] == "image" or seg["type"] == "qq_emoji":
+                try:
+                    seg["content"] = self.image_describer.describe_img(seg["url"])
+                except Exception as e:
+                    print(f"[MessageWrapper] 图片识别失败: {e}")
+                    seg["content"] = None
 
     @property
     def json(self) -> dict:
@@ -144,6 +147,14 @@ class MessageWrapper:
         return self.data["segments"]
 
     @property
+    def timestamp(self) -> int:
+        return self.data["timestamp"]
+
+    @property
+    def user_nickname(self) -> str:
+        return self.data["user_nickname"]
+
+    @property
     def text_msg(self) -> str:
         """
         提取适合LLM阅读的文本
@@ -168,7 +179,17 @@ class MessageWrapper:
                     result.append(f'【图片内容】：{seg["content"]}')
                 else:
                     result.append("[图片]")
-        return " ".join(result)
+
+        content = " ".join(result)
+        time_str = time.strftime(
+            "%Y-%m-%d %H:%M:%S",
+            time.localtime(self.timestamp)
+        )
+        return (
+            f"[{time_str}] "
+            f"{self.user_nickname}："
+            f"{content}"
+        )
 
     @property
     def image_urls(self) -> list[str]:

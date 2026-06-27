@@ -14,7 +14,9 @@ class BotPaths:
 
 @dataclass(frozen=True)
 class BotConfig:
-    name: str
+    name_zh: str
+    name_en: str
+    nickname: list[str]
     qq_id: int
     paths: BotPaths
 
@@ -42,7 +44,9 @@ class BotInfoConfigLoader:
         )
 
         return BotConfig(
-            name=data["name"],
+            name_zh=data["name_zh"],
+            name_en=data["name_en"],
+            nickname=data["nickname"],
             qq_id=data["qq_id"],
             paths=paths
         )
@@ -51,7 +55,7 @@ class BotInfoConfigLoader:
 if __name__ == "__main__":
     config = BotInfoConfigLoader.load("LuoTianyi")
 
-    print(config.name)
+    print(config.name_zh)
     print(config.qq_id)
 
     print(config.paths.music_dirs)

@@ -1,4 +1,6 @@
-name: 天依
+name_zh: 洛天依
+name_en: LuoTianyi
+nickname: [ "天依", "Luo Tianyi" ]
 qq_id: 1121221045
 
 paths:
@@ -9,4 +11,4 @@ paths:
     - F:/Picture/pixiv/LuoTianyi
 
   lyric_dirs:
-    - F:/Audio/Music/Lyric/LuoTianYi
+    - F:/Audio/Music/Lyric/LuoTianyi
