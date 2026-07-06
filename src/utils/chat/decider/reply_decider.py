@@ -165,9 +165,9 @@ class ReplyDecider:
 
         reply_content = response.choices[0].message.content
 
-        print(
-            f"[ReplyDecider-API] 原始输出：\n{reply_content}"
-        )
+        # print(
+        #     f"[ReplyDecider-API] 原始输出：\n{reply_content}"
+        # )
 
         needs_reply, reason = self._parse_response(
             reply_content
@@ -257,11 +257,7 @@ class ReplyDecider:
                 print(
                     f"[ReplyDecider-API] "
                     f"{self.name_zh} "
-                    f"是否回复：{needs_reply}"
-                )
-
-                print(
-                    f"[ReplyDecider-API] "
+                    f"是否回复：{needs_reply}   "
                     f"原因：{reason}"
                 )
 

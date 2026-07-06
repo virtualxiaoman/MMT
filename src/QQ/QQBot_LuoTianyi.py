@@ -7,7 +7,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
     CheckinCommand, LyricCommand, DailyReportCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession
-from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
+from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
 from src.QQ.QQutils.msg.send_msg import MessageSender, MessageContext
 from src.QQ.QQutils.resource_management.history_storage import HistoryLogger
@@ -21,15 +21,6 @@ logger = logging.getLogger(__name__)
 
 # 配置
 CONFIG = BotInfoConfigLoader.load("LuoTianyi")
-
-
-# # 配置
-# BOT_NAME = "天依"
-# BOT_QQ_ID = 1121221045
-# RAND_PIC_PATHS = [
-#     "F:/Picture/pixiv/LuoTianyi"
-# ]
-# MUSIC_DIR = "F:/Audio/Music"
 
 
 class BotManager:
@@ -88,10 +79,10 @@ class BotManager:
             logger.info(f"黑名单用户/群不回复")
             return
 
-        message_wrapper = MessageWrapper(msg)
-        print(f"原始消息：{message_wrapper.raw_msg}\nLLM输入消息：{message_wrapper.text_msg}")
-        message_wrapper = self.image_storage.process(message_wrapper)  # 保存图片
-        self.history_logger.append(msg, message_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
+        recv_msg_wrapper = RecvMessageWrapper(msg)
+        print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.text_msg}")
+        recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)  # 保存图片
+        self.history_logger.append_recv(msg, recv_msg_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
 
         msg_sender = MessageSender(self.bot, msg)
         ctx = MessageContext(
@@ -102,7 +93,7 @@ class BotManager:
             user_raw_text=msg.raw_message.strip(),  # todo： 因为接口变动，工具类暂不使用message_wrapper.text_msg
             is_private=is_private,
             session_id=session_id,
-            message_wrapper=message_wrapper,
+            message_wrapper=recv_msg_wrapper,
             config=CONFIG
         )
 
@@ -116,7 +107,7 @@ class BotManager:
         # =========================
         # 3. 判断是否回复
         # =========================
-        should_reply = await self._should_reply(session, message_wrapper.text_msg, is_private)
+        should_reply = await self._should_reply(session, recv_msg_wrapper.text_msg, is_private)
         if not should_reply:
             logger.info(f"决定不回复这条消息")
             return
@@ -124,126 +115,31 @@ class BotManager:
         # =========================
         # 4. 回复
         # =========================
-        ai_reply = await session.get_reply(message_wrapper.text_msg)  # 生成回复
-        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
+        ai_reply = await session.get_reply(recv_msg_wrapper.text_msg)  # 生成回复
+        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.5)  # 表情包路径
 
-        await msg_sender.text(ai_reply)  # 先发送文本回复
+        text_msg_id = await msg_sender.text(ai_reply)  # 先发送文本回复
         if emoji_path:
-            await msg_sender.image(emoji_path)  # 如果有表情路径，再发送表情
+            image_msg_id = await msg_sender.image(emoji_path)  # 如果有表情路径，再发送表情
+        else:
+            image_msg_id = None
+        # todo 语音回复
 
-    # todo 语音回复
+        # =========================
+        # 5. 存储回复消息
+        # =========================
+        builder = SendMessageBuilder(
+            recv_msg_wrapper,
+            bot_id=str(CONFIG.qq_id),
+            bot_name=CONFIG.name_zh,
+        )
 
-    # async def handle_message(self, msg: Union[GroupMessage, PrivateMessage]):
-    #     """
-    #     统一处理群聊和私聊消息
-    #     """
-    #     user_text = msg.raw_message.strip()
-    #     is_private = isinstance(msg, PrivateMessage)
-    #     session_id = str(msg.user_id if is_private else msg.group_id)  # 获取唯一标识 ID
-    #     logger.info(
-    #         f"收到消息 type={'private' if is_private else 'group'} "
-    #         f"id={session_id} text={user_text}"
-    #     )
-    #     session = self.get_session(session_id, is_private)  # 获取或创建会话
-    #     session.session_id = session_id  # 确保会话 ID 是最新的
-    #     self.msg_sender = MessageSender(self.bot, msg)  # 统一 sender 对象，后续发送消息都通过它来调用 API
-    #
-    #     if not user_text:
-    #         return
-    #
-    #     # --- 1. 优先判定工具类指令 ---
-    #     # 直接调用新抽离的方法，如果处理了就 return
-    #     if await self._handle_commands(msg, session):
-    #         return
-    #
-    #     # --- 2. 使用统一的判断函数 ---
-    #     should_reply = await self.__should_reply(session, user_text, is_private)
-    #
-    #     if not should_reply:
-    #         logger.info(f"决定不回复这条消息: {user_text}")
-    #         return
-    #
-    #     ai_reply = await session.get_reply(user_text)  # 生成回复
-    #     emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.4)  # 表情包路径
-    #
-    #     await self.msg_sender.text(ai_reply)  # 先发送文本回复
-    #     if emoji_path:
-    #         await self.msg_sender.image(emoji_path)  # 如果有表情路径，再发送表情
-    #
-    #   async def _handle_commands(self, msg: Union[GroupMessage, PrivateMessage], session) -> bool:
-    #       """
-    #       处理特定指令（如：一图）
-    #       返回 True 表示指令已匹配并处理，主程序应直接 return
-    #       """
-    #       user_text = msg.raw_message.strip()
-    #
-    #       # --- 指令1：一图 ---可以以一图开始，比如指令“一图 -n 5”表示发5张图，默认发1张
-    #       if user_text == "一图" or user_text.startswith("一图 "):
-    #           # 解析指令参数，目前仅支持“-n 数字”来指定图片数量，默认1张
-    #           pic_nums = 1  # default
-    #           if user_text.startswith("一图 "):
-    #               parts = user_text.split()
-    #               if len(parts) >= 3 and parts[1] == "-n" and parts[2].isdigit():
-    #                   pic_nums = max(1, min(int(parts[2]), 3))
-    #               else:
-    #                   pic_nums = 1  # 如果参数不正确，默认发1张图
-    #
-    #           for i in range(pic_nums):
-    #               random_path = session.random_picture_provider.get_random_image_path()
-    #               if i == 0:
-    #                   await self.msg_sender.text(f"呐呐呐~coins-{5 * pic_nums}")  # 首次发文本提示扣除金币，后续只发图
-    #               await self.msg_sender.image(random_path)  # 发送图片
-    #
-    #           return True
-    #
-    #       # --- 指令2：唱歌 ---
-    #       if user_text.startswith("唱") and len(user_text) > 1:
-    #           song_name = user_text[1:].strip()
-    #           record_path = await self.__find_music_file(song_name)
-    #           logger.info(f"歌曲名: '{song_name}'，音乐文件路径是: {record_path}")
-    #           if record_path:
-    #               await self.msg_sender.record(record_path)
-    #           else:
-    #               await self.msg_sender.text(f"抱歉，天依还不会唱{song_name}这首歌呢~你可以教教天依吗(>_<)")
-    #               logger.warning(f"未找到匹配的音乐文件，无法满足用户的唱歌请求: '{song_name}'")
-    #           return True
-    #
-    #       # --- 指令3：帮助 ---
-    #       if user_text.lower() in ["help", "帮助", "菜单", "功能"]:
-    #           help_text = """꧁ 华风夏韵，洛水天依 ꧂
-    # ♾️ 这里是天依，请多指教(,,>᎑<,,)
-    # 🎨 图片小惊喜：
-    #   -> 发送「一图」 → 天依会送你一张可爱的图片哦~ 如果想看更多，试试「一图 -n 2」，可以一次看到两张呢~
-    # 🎤 为了你唱下去：
-    #   -> 发送「唱+歌名」 → 天依来为你唱这首歌（比如：唱为了你唱下去）
-    # 📋 小说明：
-    #   -> 私聊的话，天依一定会好好地回应你哟(♡>𖥦<)/♡ 群聊里除了这些特别的指令，天依还在努力学习，希望能更好地陪着你(◔◡◔)
-    #   -> 如果遇到什么问题，可以找我的好朋友virtual小满，她会帮你哒(⑅˃◡˂⑅)
-    # ❤️ （轻轻歪头，眼里闪着温暖的光）诶嘿~天依虽然是纸片人，但通过歌声和大家的爱，真的能变得更有温度呢！天依会一直一直在这里，陪着你，唱歌给大家听的(๑>؂<๑）"""
-    #           await self.msg_sender.text(help_text)
-    #           return True
-    #
-    #       # --- 指令4：群打卡/签到 ---
-    #       if user_text == "打卡":
-    #           try:
-    #               await self.bot.api.set_group_sign(
-    #                   group_id=msg.group_id
-    #               )
-    #
-    #               await self.bot.api.post_group_msg(
-    #                   group_id=msg.group_id,
-    #                   text="群签到完成~"
-    #               )
-    #               logger.info(f"已完成群 {msg.group_id} 的签到")
-    #           except Exception as e:
-    #               logger.error(f"群签到失败: {e}")
-    #               await self.bot.api.post_group_msg(
-    #                   group_id=msg.group_id,
-    #                   text=f"签到失败了呢...{e}"
-    #               )
-    #           return True
-    #
-    #       return False
+        send_wrappers = list()
+        send_wrappers.append(builder.text(message_id=text_msg_id, text=ai_reply))
+        if image_msg_id:
+            send_wrappers.append(builder.image(message_id=image_msg_id, file=emoji_path))
+        for send_wrapper in send_wrappers:
+            self.history_logger.append_send(send_wrapper)  # 保存消息（LLMinput+人类可读）
 
     async def _can_reply(self, session: ChatSession, is_private: bool) -> bool:
         """

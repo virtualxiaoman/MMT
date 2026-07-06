@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
+from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 # todo 帮助只实现了洛天依的部分，可以考虑单独写一个类来自定义
 from src.QQ.QQutils.msg.send_msg import MessageContext
 from src.config.QQ_bot_info_loader import BotConfig
@@ -187,13 +187,13 @@ class DailyReportCommand(BaseCommand):
 
     def match(self, text: str) -> bool:
         # print(text)
-        return text == "日报"
-        # return text in ["日报", "每日日报", "每日聊天报告", "聊天报告"]
+        # return text == "日报"
+        return text in ["日报", "每日日报", "每日聊天报告", "聊天报告"]
 
     async def handle(self, ctx: MessageContext) -> bool:
         generator = DailyReportGenerator(
             config=ctx.config,
-            message_wrapper=ctx.message_wrapper
+            recv_msg_wrapper=ctx.message_wrapper
         )
 
         report = await generator.generate()
@@ -211,10 +211,10 @@ class DailyReportGenerator:
     def __init__(
             self,
             config: BotConfig,
-            message_wrapper: MessageWrapper
+            recv_msg_wrapper: RecvMessageWrapper
     ):
         self.config = config
-        self.message_wrapper = message_wrapper
+        self.recv_msg_wrapper = recv_msg_wrapper
 
         self.bot_root = (
                 Path(HISTORY_DIR)
@@ -236,7 +236,7 @@ class DailyReportGenerator:
 
         session_type = (
             "private"
-            if self.message_wrapper.is_private
+            if self.recv_msg_wrapper.is_private
             else "group"
         )
 
@@ -248,7 +248,7 @@ class DailyReportGenerator:
         return str((
                            self.bot_root
                            / session_type
-                           / str(self.message_wrapper.session_id)
+                           / str(self.recv_msg_wrapper.session_id)
                            / "llm_input"
                            / month
                            / f"{day}.txt"

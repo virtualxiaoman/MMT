@@ -5,7 +5,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage, GroupMessageEv
 import logging
 
 from src.QQ.QQutils.msg.chat_session import ChatSession
-from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
+from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 from src.config.QQ_bot_info_loader import BotConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,49 +19,52 @@ class MessageSender:
         self.is_private = isinstance(msg, PrivateMessage)
 
     # 文本
-    async def text(self, content: str):
+    async def text(self, content: str) -> str:
         if self.is_private:
-            await self.bot.api.post_private_msg(
+            message_id = await self.bot.api.post_private_msg(
                 user_id=self.msg.user_id,
                 text=content
             )
         else:
-            await self.bot.api.post_group_msg(
+            message_id = await self.bot.api.post_group_msg(
                 group_id=self.msg.group_id,
                 text=content
             )
         logger.info(f"已回复{'用户' if self.is_private else '群'} "
                     f"{self.msg.user_id if self.is_private else self.msg.group_id} 的文本消息: {content}")
+        return message_id
 
     # 图片
-    async def image(self, path: str):
+    async def image(self, path: str) -> str:
         if self.is_private:
-            await self.bot.api.post_private_msg(
+            message_id = await self.bot.api.post_private_msg(
                 user_id=self.msg.user_id,
                 image=path
             )
         else:
-            await self.bot.api.post_group_msg(
+            message_id = await self.bot.api.post_group_msg(
                 group_id=self.msg.group_id,
                 image=path
             )
         logger.info(f"已回复{'用户' if self.is_private else '群'} "
                     f"{self.msg.user_id if self.is_private else self.msg.group_id}，图片路径为: {path}")
+        return message_id
 
     # 语音
-    async def record(self, path: str):
+    async def record(self, path: str) -> str:
         if self.is_private:
-            await self.bot.api.send_private_record(
+            message_id = await self.bot.api.send_private_record(
                 user_id=self.msg.user_id,
                 file=path
             )
         else:
-            await self.bot.api.send_group_record(
+            message_id = await self.bot.api.send_group_record(
                 group_id=self.msg.group_id,
                 file=path
             )
         logger.info(f"已回复{'用户' if self.is_private else '群'} "
                     f"{self.msg.user_id if self.is_private else self.msg.group_id}，语音路径为: {path}")
+        return message_id
 
 
 @dataclass
@@ -70,10 +73,8 @@ class MessageContext:
     msg: Union[GroupMessage, PrivateMessage]
     session: "ChatSession"
     msg_sender: "MessageSender"
-    message_wrapper: "MessageWrapper"
+    message_wrapper: "RecvMessageWrapper"
     config: "BotConfig"
     user_raw_text: str
     is_private: bool
     session_id: str
-
-

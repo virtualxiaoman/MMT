@@ -6,7 +6,7 @@ import pickle
 from datetime import datetime
 from pathlib import Path
 
-from src.QQ.QQutils.msg.msg_wrapper import MessageWrapper
+from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageWrapper
 from src.config.path import HISTORY_DIR
 
 
@@ -47,7 +47,7 @@ class HistoryLogger:
     # 对外接口
     # ==========================================================
 
-    def append(self, msg, message_wrapper: MessageWrapper):
+    def append_recv(self, msg, message_wrapper: RecvMessageWrapper):
         """
         追加一条聊天记录
 
@@ -64,11 +64,26 @@ class HistoryLogger:
         self._append_llm_input(message_wrapper)
         self._append_human(message_wrapper)
 
+    def append_send(self, message_wrapper: SendMessageWrapper):
+        """
+        追加一条聊天记录
+
+        Parameters
+        ----------
+        msg
+            原始消息对象
+        message_wrapper
+            标准化消息
+        """
+
+        self._append_llm_input(message_wrapper)
+        self._append_human(message_wrapper)
+
     # ==========================================================
     # 路径
     # ==========================================================
 
-    def _session_dir(self, wrapper: MessageWrapper) -> Path:
+    def _session_dir(self, wrapper: RecvMessageWrapper) -> Path:
         """
         获取当前会话目录
         """
@@ -81,19 +96,19 @@ class HistoryLogger:
                 / str(wrapper.session_id)
         )
 
-    def _month_str(self, wrapper: MessageWrapper) -> str:
+    def _month_str(self, wrapper: RecvMessageWrapper) -> str:
         return datetime.fromtimestamp(
             wrapper.timestamp
         ).strftime("%Y-%m")
 
-    def _day_str(self, wrapper: MessageWrapper) -> str:
+    def _day_str(self, wrapper: RecvMessageWrapper) -> str:
         return datetime.fromtimestamp(
             wrapper.timestamp
         ).strftime("%Y-%m-%d")
 
     def _build_file(
             self,
-            wrapper: MessageWrapper,
+            wrapper: RecvMessageWrapper | SendMessageWrapper,
             category: str,
             suffix: str
     ) -> Path:
@@ -127,7 +142,7 @@ class HistoryLogger:
     def _append_raw(
             self,
             msg,
-            wrapper: MessageWrapper
+            wrapper: RecvMessageWrapper
     ):
         """
         原始消息
@@ -154,7 +169,7 @@ class HistoryLogger:
 
     def _append_canonical(
             self,
-            wrapper: MessageWrapper
+            wrapper: RecvMessageWrapper
     ):
         """
         标准化消息
@@ -186,7 +201,7 @@ class HistoryLogger:
 
     def _append_llm_input(
             self,
-            wrapper: MessageWrapper
+            wrapper: RecvMessageWrapper | SendMessageWrapper
     ):
         """
         LLM输入文本
@@ -211,7 +226,7 @@ class HistoryLogger:
 
     def _append_human(
             self,
-            wrapper: MessageWrapper
+            wrapper: RecvMessageWrapper | SendMessageWrapper
     ):
         """
         人类阅读版
@@ -241,7 +256,7 @@ class HistoryLogger:
 
     def _build_human_markdown(
             self,
-            wrapper: MessageWrapper
+            wrapper: RecvMessageWrapper
     ) -> str:
         """
         构造人类阅读版 Markdown（HTML增强）
@@ -419,7 +434,7 @@ display:block;
 
     def _human_relative_file(
             self,
-            wrapper: MessageWrapper,
+            wrapper: RecvMessageWrapper,
             file: str
     ) -> str:
         """
