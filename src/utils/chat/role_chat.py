@@ -112,9 +112,13 @@ class Chat(ABC):
             return results
 
 
-class ChatDSAPI(Chat):
+class ChatDSAPI:
     def __init__(self, model_name=None, api_path=None, base_url="https://api.deepseek.com"):
-        super().__init__()
+        # 统一管理会话历史记录
+        self.msg = []
+        # 角色名称。命名约定：官方名称，中文名使用全称，英文名称大小写参考官方（尽量首字母大写），但不含空格
+        self.role_name_zh = None
+        self.role_name_en = None
 
         if model_name is None:
             if model_settings.reply.get("name") == "deepseek-chat":
@@ -139,6 +143,62 @@ class ChatDSAPI(Chat):
             api_key=load_from_txt(api_path),
             base_url=base_url
         )
+
+    def _init_role_prompt(self):
+        """
+        初始化角色设定提示
+        :return: json，角色设定提示：
+          {
+            "role": "system",
+            "content": role_prompt,
+          }
+        """
+        if self.role_name_zh in {"砂狼白子", "白子", "Shiroko"}:
+            self.role_name_zh = "砂狼白子"
+            self.role_name_en = "Shiroko"
+        elif self.role_name_zh in {"阿洛娜", "阿罗娜", "彩奈", "Arona"}:
+            self.role_name_zh = "阿洛娜"
+            self.role_name_en = "Arona"
+        elif self.role_name_zh in {"洛天依", "天依", "Luo Tianyi", "LuoTianyi"}:
+            self.role_name_zh = "洛天依"
+            self.role_name_en = "LuoTianyi"
+        else:
+            print("暂不支持该角色")
+            return None
+        path = Path(PROMPT_DIR) / f"{self.role_name_en}.txt"
+        path = Path(PROMPT_DIR) / f"{self.role_name_en}/role.txt"  # todo: 这里需要大改
+        # print(f"绝对路径为：{path.resolve()}")
+        if not path.exists():
+            warnings.warn(f"角色设定提示词文件 {path} 不存在")
+            return None
+        else:
+            role_prompt = load_from_txt(path)
+
+        temp_cur_role = CurrentRole()
+        temp_cur_role.update_role_yaml(role_name_zh=self.role_name_zh, role_name_en=self.role_name_en)
+        print(f"初始化角色{self.role_name_zh}的prompt成功")
+        role_system = {
+            "role": "system",
+            "content": role_prompt,
+        }
+        return role_system
+
+    def init_role(self, role_name: str) -> bool:
+        """
+        自动初始化角色设定提示
+        :param role_name: 角色名称
+        :return: bool，初始化是否成功
+        """
+        self.role_name_zh = role_name
+        role_system = self._init_role_prompt()
+        if role_system is not None:
+            self.msg = [
+                role_system,  # 角色设定提示
+            ]
+            return True
+        else:
+            self.msg = None
+            return False
 
     def one_chat(self, query: str) -> str:
         """

@@ -2,6 +2,7 @@ name_zh: 洛天依
 name_en: LuoTianyi
 nickname: [ "天依", "Luo Tianyi" ]
 qq_id: 1121221045
+admin_qq_id: 2958694743
 
 paths:
   music_dirs:
@@ -9,6 +10,7 @@ paths:
 
   random_picture_dirs:
     - F:/Picture/pixiv/LuoTianyi
+    - F:/Picture/LuoTianyi
 
   lyric_dirs:
     - F:/Audio/Music/Lyric/LuoTianyi

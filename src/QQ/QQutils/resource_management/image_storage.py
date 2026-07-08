@@ -9,6 +9,7 @@ from pathlib import Path
 import requests
 from PIL import Image
 
+from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageWrapper
 from src.config.path import HISTORY_DIR
 
 
@@ -361,8 +362,8 @@ class ImageStorage:
 
     def process(
             self,
-            message_wrapper,
-    ):
+            message_wrapper: RecvMessageWrapper | SendMessageWrapper
+    ) -> RecvMessageWrapper | SendMessageWrapper:
         """
         下载 MessageWrapper 中所有图片，并填写 file 字段。
         """

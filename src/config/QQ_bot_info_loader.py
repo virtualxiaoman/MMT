@@ -18,6 +18,7 @@ class BotConfig:
     name_en: str
     nickname: list[str]
     qq_id: int
+    admin_qq_id: int
     paths: BotPaths
 
 
@@ -48,6 +49,7 @@ class BotInfoConfigLoader:
             name_en=data["name_en"],
             nickname=data["nickname"],
             qq_id=data["qq_id"],
+            admin_qq_id=data.get("admin_qq_id", []),
             paths=paths
         )
 

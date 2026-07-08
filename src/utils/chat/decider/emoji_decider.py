@@ -42,7 +42,6 @@ class EmojiDecider(ChatDSAPI):
 
         self.emoji_dir = Path(EMOJI_DIR) / current_role.name_en
 
-        # 核心数据
         self.emoji_map = self._build_emoji_map()
         self.emoji_list = sorted(self.emoji_map.keys())
 
@@ -52,7 +51,6 @@ class EmojiDecider(ChatDSAPI):
     # ------------------------------------------------------------------
     # 构建 emoji_map
     # ------------------------------------------------------------------
-
     @staticmethod
     def _normalize_name(name: str) -> str:
         """
@@ -105,22 +103,16 @@ class EmojiDecider(ChatDSAPI):
         if not self.emoji_dir.exists():
             print(f"表情目录不存在：{self.emoji_dir}")
             return {}
-
         emoji_map = defaultdict(list)
 
         for file in self.emoji_dir.rglob("*"):
-
             if not file.is_file():
                 continue
-
             if file.suffix.lower() not in self.IMAGE_SUFFIXES:
                 continue
-
             key = self._normalize_name(file.stem)
-
             if not self._is_valid_name(key):
                 continue
-
             emoji_map[key].append(file)
 
         # 排序，保证稳定
@@ -140,30 +132,22 @@ class EmojiDecider(ChatDSAPI):
 
     def init_role(self, role_name) -> bool:
         """初始化Prompt"""
-
         self.role_name = role_name
-
         path = Path(PROMPT_DIR) / "tools/EmojiDecider.txt"
 
         try:
-
             role_prompt = load_from_txt(path)
-
             emoji_str = ", ".join(self.emoji_list)
-
             role_prompt = role_prompt.replace(
                 "[...]",
                 f"[{emoji_str}]"
             )
             # print(role_prompt)
-
             self.system_prompt = {
                 "role": "system",
                 "content": role_prompt
             }
-
             self.msg = [self.system_prompt]
-
             return True
 
         except Exception as e:
@@ -175,7 +159,6 @@ class EmojiDecider(ChatDSAPI):
     # ------------------------------------------------------------------
 
     def decide(self, text: str) -> Union[str, bool]:
-
         temp_msg = [
             self.system_prompt,
             {
@@ -185,24 +168,18 @@ class EmojiDecider(ChatDSAPI):
         ]
 
         try:
-
             completion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=temp_msg,
                 temperature=0.0,
                 stream=False
             )
-
             result = completion.choices[0].message.content.strip()
-
             if result in self.emoji_map:
                 return result
-
             if result == "False":
                 return False
-
             return False
-
         except Exception as e:
             print(f"表情决策请求异常: {e}")
             return False

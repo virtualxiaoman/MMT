@@ -75,6 +75,6 @@ class MessageContext:
     msg_sender: "MessageSender"
     message_wrapper: "RecvMessageWrapper"
     config: "BotConfig"
-    user_raw_text: str
+    tool_text: str
     is_private: bool
     session_id: str

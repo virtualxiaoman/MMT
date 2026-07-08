@@ -1,11 +1,13 @@
 import logging
+import os
 import time
+from pathlib import Path
 from typing import Dict
 
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
-    CheckinCommand, LyricCommand, DailyReportCommand
+    CheckinCommand, LyricCommand, DailyReportCommand, BanCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
@@ -15,6 +17,9 @@ from src.QQ.QQutils.resource_management.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
 
 # from src.utils.chat.img_describer import ImageDescriber
+
+# api：https://docs.ncatbot.xyz/reference
+# prompt：https://chatgpt.com/c/6a4cfe69-eb3c-83ec-b319-c00f95d8e146
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -41,6 +46,7 @@ class BotManager:
         self.registry.register(CheckinCommand())
         self.registry.register(LyricCommand(CONFIG.paths.lyric_dirs))
         self.registry.register(DailyReportCommand())
+        self.registry.register(BanCommand())
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -50,10 +56,19 @@ class BotManager:
             self.sessions[key] = ChatSession(session_id, is_private, CONFIG)
         return self.sessions[key]
 
+    # api参考 https://docs.ncatbot.xyz/reference
     async def handle_message(self, msg: PrivateMessage | GroupMessage):
         """
         统一处理群聊和私聊消息
         """
+        # for _ in range(10):
+        #     await self.bot.api.send_poke(
+        #         group_id="1039857271", user_id="1767294078"
+        #     )
+        # await self.bot.api.set_msg_emoji_like(
+        #     message_id="1311274050", emoji_id="424", set=True
+        # )
+
         # user_raw_text = msg.raw_message.strip()
         # print(msg)
         is_private = isinstance(msg, PrivateMessage)
@@ -80,7 +95,8 @@ class BotManager:
             return
 
         recv_msg_wrapper = RecvMessageWrapper(msg)
-        print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.text_msg}")
+        print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.text_msg}\n"
+              f"工具类输入消息：{recv_msg_wrapper.tool_msg}")
         recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)  # 保存图片
         self.history_logger.append_recv(msg, recv_msg_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
 
@@ -90,7 +106,7 @@ class BotManager:
             msg=msg,
             session=session,
             msg_sender=msg_sender,
-            user_raw_text=msg.raw_message.strip(),  # todo： 因为接口变动，工具类暂不使用message_wrapper.text_msg
+            tool_text=recv_msg_wrapper.tool_msg,
             is_private=is_private,
             session_id=session_id,
             message_wrapper=recv_msg_wrapper,
@@ -116,7 +132,7 @@ class BotManager:
         # 4. 回复
         # =========================
         ai_reply = await session.get_reply(recv_msg_wrapper.text_msg)  # 生成回复
-        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.5)  # 表情包路径
+        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.3)  # 表情包路径
 
         text_msg_id = await msg_sender.text(ai_reply)  # 先发送文本回复
         if emoji_path:
@@ -137,7 +153,8 @@ class BotManager:
         send_wrappers = list()
         send_wrappers.append(builder.text(message_id=text_msg_id, text=ai_reply))
         if image_msg_id:
-            send_wrappers.append(builder.image(message_id=image_msg_id, file=emoji_path))
+            send_wrappers.append(builder.image(message_id=image_msg_id, file=emoji_path,
+                                               content=Path(emoji_path).stem))
         for send_wrapper in send_wrappers:
             self.history_logger.append_send(send_wrapper)  # 保存消息（LLMinput+人类可读）
 

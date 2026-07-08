@@ -8,6 +8,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from src.utils.chat.img_describer import ImageDescriber
 
 
+# 应该继承同一个类以便一起管理
 class RecvMessageWrapper:
     """
     将原始消息标准化
@@ -190,6 +191,22 @@ class RecvMessageWrapper:
             f"{self.user_nickname}："
             f"{content}"
         )
+
+    @property
+    def tool_msg(self) -> str:
+        """
+        提取传入工具类的文本
+        """
+        result = []
+        for seg in self.segments:
+            seg_type = seg["type"]
+            if seg_type == "text":
+                result.append(seg["content"])
+            elif seg_type == "at":
+                result.append(f'@{seg["qq_id"]}')
+
+        content = " ".join(result)
+        return content
 
     @property
     def image_urls(self) -> list[str]:

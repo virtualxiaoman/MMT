@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -33,7 +34,7 @@ class CommandRegistry:
 
     async def dispatch(self, ctx) -> bool:
         for cmd in self.commands:
-            if not cmd.match(ctx.user_raw_text):
+            if not cmd.match(ctx.tool_text):
                 continue  # 不匹配
             handled = await cmd.handle(ctx)  # 是否成功处理
             if handled:
@@ -53,7 +54,7 @@ class ImageCommand(BaseCommand):
         return text == "一图" or text.startswith("一图 ")
 
     async def handle(self, ctx: MessageContext) -> bool:
-        user_text = ctx.user_raw_text
+        user_text = ctx.tool_text
         pic_nums = 1  # default
         # 解析指令参数，目前仅支持“-n 数字”来指定图片数量，默认1张
         if user_text.startswith("一图 "):
@@ -80,7 +81,7 @@ class MusicCommand(BaseCommand):
         return text.startswith("唱") and len(text) > 1
 
     async def handle(self, ctx: MessageContext) -> bool:
-        song_name = ctx.user_raw_text[1:].strip()
+        song_name = ctx.tool_text[1:].strip()
         music_finder = MusicRepository(
             song_name=song_name,
             music_dirs=self.music_dir
@@ -175,7 +176,7 @@ class LyricCommand(BaseCommand):
         return True
 
     async def handle(self, ctx: MessageContext) -> bool:
-        result = self.repository.find_next_line(ctx.user_raw_text)
+        result = self.repository.find_next_line(ctx.tool_text)
         if result is None:
             return False
         await ctx.msg_sender.text(result)
@@ -296,3 +297,90 @@ class DailyReportGenerator:
 
         # todo 后续：工具化（代码）总结数据内容，图表，图片输出
 
+
+# --- 指令7：禁言 ---
+class BanCommand(BaseCommand):
+    """
+    #禁言 @123456 3分钟
+    #解除禁言 @123456
+    """
+
+    # 单位 -> 秒
+    TIME_UNITS = {
+        "秒": 1,
+        "分钟": 60,
+        "分": 60,
+        "小时": 3600,
+        "时": 3600,
+        "天": 86400,
+    }
+
+    def match(self, text: str) -> bool:
+        text = text.strip()
+        return text.startswith("#禁言") or text.startswith("#解除禁言")
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        if str(ctx.message_wrapper.user_id) != str(ctx.config.admin_qq_id):
+            await ctx.msg_sender.text("天依是为大家带来幸福的歌者，不是用来禁言别人的工具哦。只有我特别的伙伴小满才可以命令天依哒~")
+            return True
+        text = ctx.tool_text
+
+        # 必须在群聊
+        if ctx.is_private:
+            await ctx.msg_sender.text("只有群聊才能使用该命令。")
+            return True
+
+        # ----------------------------
+        # 解除禁言
+        # ----------------------------
+        if text.startswith("#解除禁言"):
+            m = re.search(r"@(\d+)", text)
+
+            if not m:
+                await ctx.msg_sender.text("格式错误：#解除禁言 @QQ号")
+                return True
+
+            user_id = int(m.group(1))
+
+            await ctx.bot.api.set_group_ban(
+                group_id=ctx.msg.group_id,
+                user_id=user_id,
+                duration=0,
+            )
+
+            await ctx.msg_sender.text("已解除禁言。")
+            return True
+
+        # ----------------------------
+        # 禁言
+        # ----------------------------
+        m = re.search(
+            r"#禁言\s*@(\d+)(?:\s+(\d+)\s*(秒|分钟|分|小时|时|天))?",
+            text,
+        )
+
+        if not m:
+            await ctx.msg_sender.text(
+                "格式错误：#禁言 @QQ号 3分钟"
+            )
+            return True
+
+        user_id = int(m.group(1))
+
+        # 默认1分钟
+        duration = 60
+
+        if m.group(2):
+            value = int(m.group(2))
+            unit = m.group(3)
+
+            duration = value * self.TIME_UNITS[unit]
+
+        await ctx.bot.api.set_group_ban(
+            group_id=ctx.msg.group_id,
+            user_id=user_id,
+            duration=duration,
+        )
+
+        await ctx.msg_sender.text(f"已禁言用户 {user_id} 共 {duration} 秒。")
+        return True
