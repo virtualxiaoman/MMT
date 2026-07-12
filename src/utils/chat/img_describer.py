@@ -5,6 +5,7 @@ import dashscope
 from dashscope import MultiModalConversation
 import io
 from src.config.path import API_KEY_DIR
+from src.utils.chat.model_type import LLMModelType
 from src.utils.tools.file import load_from_txt
 from PIL import Image
 
@@ -94,7 +95,7 @@ class ImageDescriber:
     def __init__(
             self,
             api_key: str | None = None,
-            model: str = "qwen3-vl-plus",
+            model: str = LLMModelType.QWEN_VL_PLUS.value,
             max_pixels: int = 768 * 768
     ):
         if api_key is not None:

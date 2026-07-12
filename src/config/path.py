@@ -13,6 +13,7 @@ HISTORY_DIR = ASSETS_DIR / "history"
 PICTURES_DIR = ASSETS_DIR / "pictures"
 
 QQ_BOT_INFO_DIR = CONFIG_DIR / "QQ_bot_info"
+QQ_HISTORY_DIR = HISTORY_DIR / "qq_chat"
 
 # print(f"项目根目录: {PROJECT_ROOT}")
 # print(f"资源目录: {ASSETS_DIR}")

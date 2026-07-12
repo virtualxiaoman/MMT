@@ -1,12 +1,7 @@
-from dataclasses import dataclass
 from typing import Union
-from ncatbot.core import BotClient, GroupMessage, PrivateMessage, GroupMessageEvent, PrivateMessageEvent
+from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 import logging
-
-from src.QQ.QQutils.msg.chat_session import ChatSession
-from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
-from src.config.QQ_bot_info_loader import BotConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -67,14 +62,3 @@ class MessageSender:
         return message_id
 
 
-@dataclass
-class MessageContext:
-    bot: BotClient
-    msg: Union[GroupMessage, PrivateMessage]
-    session: "ChatSession"
-    msg_sender: "MessageSender"
-    message_wrapper: "RecvMessageWrapper"
-    config: "BotConfig"
-    tool_text: str
-    is_private: bool
-    session_id: str

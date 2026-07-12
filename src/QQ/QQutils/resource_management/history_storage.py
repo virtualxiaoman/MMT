@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageWrapper
-from src.config.path import HISTORY_DIR
+from src.config.path import HISTORY_DIR, QQ_HISTORY_DIR
 
 
 class HistoryLogger:
@@ -41,7 +41,7 @@ class HistoryLogger:
 
     def __init__(self, config):
         self.bot_id = str(config.qq_id)
-        self.root = Path(HISTORY_DIR) / "qq_chat" / self.bot_id
+        self.root = Path(QQ_HISTORY_DIR) / self.bot_id
 
     # ==========================================================
     # 对外接口

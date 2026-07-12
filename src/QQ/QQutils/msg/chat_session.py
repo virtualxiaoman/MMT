@@ -1,6 +1,9 @@
 import asyncio
 import logging
+from functools import partial
 
+from src.QQ.QQutils.msg.pipeline import chat_pipeline
+from src.QQ.QQutils.msg.msgctx import MessageContext
 from src.config.QQ_bot_info_loader import BotConfig
 from src.config.QQ_reply_settings import QQReplySettings
 from src.utils.chat.decider.emoji_decider import EmojiDecider
@@ -24,12 +27,42 @@ class ChatSession:
         self.qq_reply_settings = QQReplySettings(config.qq_id)
         logger.info(f"已为{'私聊' if is_private else '群聊'} {session_id} 初始化 AI 会话")
 
-    async def get_reply(self, text: str) -> str:
-        """调用 AI 生成回复"""
+    # async def get_reply(self, text: str) -> str:
+    #     """调用 AI 生成回复"""
+    #     try:
+    #         # ChatDSAPI.one_chat 是同步的
+    #         loop = asyncio.get_event_loop()
+    #         return await loop.run_in_executor(None, self.llm_chater.one_chat, text)
+    #     except Exception as e:
+    #         logger.error(f"AI 生成回复失败: {e}")
+    #         return "呜... 脑子转不过来了..."
+
+    async def get_reply(
+            self,
+            ctx: MessageContext,
+            text: str,
+    ) -> str:
+        """
+        调用 ChatPipeline 生成回复
+        """
         try:
-            # ChatDSAPI.one_chat 是同步的
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, self.llm_chater.one_chat, text)
-        except Exception as e:
-            logger.error(f"AI 生成回复失败: {e}")
+            loop = asyncio.get_running_loop()
+            func = partial(
+                chat_pipeline,
+                name_en=ctx.config.name_en,
+                bot_id=ctx.config.qq_id,
+                is_private=ctx.is_private,
+                session_id=ctx.session_id,
+                query=text
+            )
+
+            reply = await loop.run_in_executor(
+                None,
+                func,
+            )
+
+            return reply
+
+        except Exception:
+            logger.exception("AI 生成回复失败")
             return "呜... 脑子转不过来了..."

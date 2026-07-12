@@ -5,9 +5,9 @@ from pathlib import Path
 
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 # todo 帮助只实现了洛天依的部分，可以考虑单独写一个类来自定义
-from src.QQ.QQutils.msg.send_msg import MessageContext
+from src.QQ.QQutils.msg.msgctx import MessageContext
 from src.config.QQ_bot_info_loader import BotConfig
-from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR
+from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR, QQ_HISTORY_DIR
 from src.utils.chat.role_chat import DeepSeekClient
 from src.utils.tools.file import load_from_txt
 from src.utils.tools.resource_management.specify_lyric import LyricRepository
@@ -218,8 +218,7 @@ class DailyReportGenerator:
         self.recv_msg_wrapper = recv_msg_wrapper
 
         self.bot_root = (
-                Path(HISTORY_DIR)
-                / "qq_chat"
+                Path(QQ_HISTORY_DIR)
                 / str(config.qq_id)
         )
 

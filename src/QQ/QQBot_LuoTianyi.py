@@ -11,7 +11,8 @@ from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCom
 from src.QQ.QQutils.msg.chat_session import ChatSession
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
-from src.QQ.QQutils.msg.send_msg import MessageSender, MessageContext
+from src.QQ.QQutils.msg.send_msg import MessageSender
+from src.QQ.QQutils.msg.msgctx import MessageContext
 from src.QQ.QQutils.resource_management.history_storage import HistoryLogger
 from src.QQ.QQutils.resource_management.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
@@ -61,9 +62,9 @@ class BotManager:
         """
         统一处理群聊和私聊消息
         """
-        # for _ in range(10):
+        # for _ in range(12):
         #     await self.bot.api.send_poke(
-        #         group_id="1039857271", user_id="1767294078"
+        #         group_id="1039857271", user_id="2705227496"
         #     )
         # await self.bot.api.set_msg_emoji_like(
         #     message_id="1311274050", emoji_id="424", set=True
@@ -131,7 +132,7 @@ class BotManager:
         # =========================
         # 4. 回复
         # =========================
-        ai_reply = await session.get_reply(recv_msg_wrapper.text_msg)  # 生成回复
+        ai_reply = await session.get_reply(ctx=ctx, text=recv_msg_wrapper.text_msg)  # 生成回复
         emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.3)  # 表情包路径
 
         text_msg_id = await msg_sender.text(ai_reply)  # 先发送文本回复
