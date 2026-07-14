@@ -12,7 +12,7 @@ from src.utils.chat.llm.llm_chat import LLMDSAPI
 from src.utils.chat.llm.run_prompt import PromptRunner
 from src.utils.chat.manager.conversation import ConversationManager
 from src.utils.chat.model_type import LLMModelType
-from src.utils.chat.prompt.load_prompt import KnowledgeLoader, KnowledgeRetriever
+from src.utils.chat.prompt.load_prompt import KnowledgeLoader, KnowledgeRetriever, RoleLoader
 from src.utils.tools.file import load_from_txt
 
 
@@ -55,7 +55,6 @@ class ChatPipeline:
             bot_id: int,
             is_private: bool,
             session_id: str,
-            llm: LLMDSAPI,
             system_prompt: str,
             knowledge_name: Optional[str] = None,
             memory_manager: Optional[SummaryManager] = None,
@@ -66,7 +65,7 @@ class ChatPipeline:
         self.is_private = is_private
         self.session_id = session_id
 
-        self.llm = llm
+        self.llm = LLMDSAPI(model=LLMModelType.DS_PRO)
 
         self.base_system_prompt = system_prompt
 
@@ -127,6 +126,7 @@ class ChatPipeline:
                 knowledge_context,
             )
         )
+        print(system_prompt)
 
         # --------------------------------
         # 4. 创建Conversation
@@ -292,20 +292,11 @@ class ChatPipeline:
 
 
 def chat_pipeline(name_en: str, bot_id: int, is_private: bool, session_id: str, query: str):
-    path = Path(PROMPT_DIR) / f"{name_en}/role.txt"
-    # print(f"绝对路径为：{path.resolve()}")
-    if not path.exists():
-        warnings.warn(f"角色设定提示词文件 {path} 不存在")
-        return None
-    else:
-        role_prompt = load_from_txt(path)
-
+    role_prompt = RoleLoader.load(name_en)
     runner = PromptRunner()
     generator = SummaryGenerator(runner)
     manager = SummaryManager(bot_id=bot_id, is_private=is_private, session_id=session_id, generator=generator)
-    llm = LLMDSAPI(model=LLMModelType.DS_PRO)
-
-    pipeline = ChatPipeline(bot_id=bot_id, is_private=is_private, session_id=session_id, llm=llm,
+    pipeline = ChatPipeline(bot_id=bot_id, is_private=is_private, session_id=session_id,
                             system_prompt=role_prompt, knowledge_name=name_en, memory_manager=manager)
     reply = pipeline.chat(query)
     print(reply)
@@ -335,7 +326,6 @@ if __name__ == "__main__":
         bot_id=bot_id,
         is_private=is_private,
         session_id=session_id,
-        llm=llm,
         system_prompt=prompt,
         knowledge_name="LuoTianyi",
         memory_manager=manager,

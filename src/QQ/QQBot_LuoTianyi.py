@@ -7,15 +7,15 @@ from typing import Dict
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
-    CheckinCommand, LyricCommand, DailyReportCommand, BanCommand
-from src.QQ.QQutils.msg.chat_session import ChatSession
+    CheckinCommand, LyricCommand, DailyReportCommand, BanCommand, MorningCommand
+from src.QQ.QQutils.msg.chat_session import ChatSession, MessageContext
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
 from src.QQ.QQutils.msg.send_msg import MessageSender
-from src.QQ.QQutils.msg.msgctx import MessageContext
 from src.QQ.QQutils.resource_management.history_storage import HistoryLogger
 from src.QQ.QQutils.resource_management.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
+from src.utils.chat.decider.reply_decider import ReplyDecisionData
 
 # from src.utils.chat.img_describer import ImageDescriber
 
@@ -48,6 +48,7 @@ class BotManager:
         self.registry.register(LyricCommand(CONFIG.paths.lyric_dirs))
         self.registry.register(DailyReportCommand())
         self.registry.register(BanCommand())
+        self.registry.register(MorningCommand())
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -110,7 +111,7 @@ class BotManager:
             tool_text=recv_msg_wrapper.tool_msg,
             is_private=is_private,
             session_id=session_id,
-            message_wrapper=recv_msg_wrapper,
+            recv_msg_wrapper=recv_msg_wrapper,
             config=CONFIG
         )
 
@@ -124,8 +125,8 @@ class BotManager:
         # =========================
         # 3. 判断是否回复
         # =========================
-        should_reply = await self._should_reply(session, recv_msg_wrapper.text_msg, is_private)
-        if not should_reply:
+        decision = await self._should_reply(session, is_private, recv_msg_wrapper)
+        if not decision.needs_reply:
             logger.info(f"决定不回复这条消息")
             return
 
@@ -168,13 +169,28 @@ class BotManager:
         """
         return session.qq_reply_settings.can_reply(session.session_id, is_private)
 
-    async def _should_reply(self, session: ChatSession, user_raw_text: str, is_private: bool) -> bool:
+    async def _should_reply(self, session: ChatSession, is_private: bool,
+                            recv_msg_wrapper: RecvMessageWrapper) -> ReplyDecisionData:
         """
         判定是否回复：看回复类型，私聊默认回复，群聊由 decider 判定
         """
         if is_private:
-            return True  # 私聊除非被拉黑，不然就默认回复
-        return session.reply_decider.check_if_should_reply(user_raw_text)  # 群聊还要由模型判定是否回复
+            return ReplyDecisionData(
+                needs_reply=True,
+                reason="私聊默认回复"
+            )  # 私聊除非被拉黑，不然就默认回复
+        image_url = recv_msg_wrapper.image_urls
+        # print(f"[_should_reply] 图片数量：{len(image_url)}")
+        # 检查有多少张图片，如果只有一张才进行表情包检测
+        if len(image_url) == 1:
+            is_emoji = session.emoji_detector.is_emoji(image_url[0])
+            print(f"{image_url} is emoji: {is_emoji}")
+            if is_emoji:
+                return ReplyDecisionData(
+                    needs_reply=False,
+                    reason="只是表情包，不回复"
+                )  # 如果是表情包就不回复
+        return session.reply_decider.check_if_should_reply(recv_msg_wrapper.text_msg)  # 群聊还要由模型判定是否回复
 
 
 # ========== 运行部分 ==========

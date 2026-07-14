@@ -241,8 +241,15 @@ class SummaryManager:
         """
         读取长期摘要。
         """
-
         path = (self.summary_dir / self.LONG_TERM_FILE)
+        if not path.exists():
+            manager = SummaryManager(
+                bot_id=self.bot_id,
+                is_private=self.is_private,
+                session_id=self.session_id,
+                generator=self.generator,
+            )
+            manager.initialize()
         return self._read_text(path)
 
     def load_short_term(self) -> str:

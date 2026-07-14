@@ -1,13 +1,14 @@
 import logging
+import random
 import re
 from datetime import datetime
 from pathlib import Path
 
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 # todo 帮助只实现了洛天依的部分，可以考虑单独写一个类来自定义
-from src.QQ.QQutils.msg.msgctx import MessageContext
+from src.QQ.QQutils.msg.chat_session import MessageContext
 from src.config.QQ_bot_info_loader import BotConfig
-from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR, QQ_HISTORY_DIR
+from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR, QQ_HISTORY_DIR, VOICE_DIR
 from src.utils.chat.role_chat import DeepSeekClient
 from src.utils.tools.file import load_from_txt
 from src.utils.tools.resource_management.specify_lyric import LyricRepository
@@ -53,6 +54,7 @@ class ImageCommand(BaseCommand):
     def match(self, text: str) -> bool:
         return text == "一图" or text.startswith("一图 ")
 
+    # todo 没写非文本匹配的tool调用，例如@洛天依 来几张天依美图
     async def handle(self, ctx: MessageContext) -> bool:
         user_text = ctx.tool_text
         pic_nums = 1  # default
@@ -194,7 +196,7 @@ class DailyReportCommand(BaseCommand):
     async def handle(self, ctx: MessageContext) -> bool:
         generator = DailyReportGenerator(
             config=ctx.config,
-            recv_msg_wrapper=ctx.message_wrapper
+            recv_msg_wrapper=ctx.recv_msg_wrapper
         )
 
         report = await generator.generate()
@@ -319,8 +321,9 @@ class BanCommand(BaseCommand):
         return text.startswith("#禁言") or text.startswith("#解除禁言")
 
     async def handle(self, ctx: MessageContext) -> bool:
-        if str(ctx.message_wrapper.user_id) != str(ctx.config.admin_qq_id):
-            await ctx.msg_sender.text("天依是为大家带来幸福的歌者，不是用来禁言别人的工具哦。只有我特别的伙伴小满才可以命令天依哒~")
+        if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
+            await ctx.msg_sender.text(
+                "天依是为大家带来幸福的歌者，不是用来禁言别人的工具哦。只有我特别的伙伴小满才可以命令天依哒~")
             return True
         text = ctx.tool_text
 
@@ -382,4 +385,27 @@ class BanCommand(BaseCommand):
         )
 
         await ctx.msg_sender.text(f"已禁言用户 {user_id} 共 {duration} 秒。")
+        return True
+
+
+class MorningCommand(BaseCommand):
+    def __init__(self):
+        pass
+
+    def match(self, text: str) -> bool:
+        return text in ["早安", "早上好", "早呀", "早上好呀", "早"]
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        record_path_1 = VOICE_DIR / "LuoTianyi/大笨蛋，现在好像不是很早了呢.mp3"
+        record_path_2 = VOICE_DIR / "LuoTianyi/您刚醒呢，都几点了这，还说早呢.mp3"  # todo: 支持更多语音
+        record_paths = [str(record_path_1.resolve()), str(record_path_2.resolve())]
+        record_path = random.choice(record_paths)
+        # record_path = await self._find_music_file(song_name)
+        logger.info(f"文件路径是: {record_path}")
+        if record_path:
+            await ctx.msg_sender.record(record_path)
+        else:
+            await ctx.msg_sender.text(f"天依还没起床呢")
+            logger.warning(f"未找到匹配的早安文件: '{record_path}'")
+
         return True

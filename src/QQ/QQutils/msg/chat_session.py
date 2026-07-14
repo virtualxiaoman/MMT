@@ -1,18 +1,37 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from functools import partial
+from typing import Union
 
+from ncatbot.core import BotClient, GroupMessageEvent, PrivateMessageEvent, GroupMessage, PrivateMessage
+
+from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 from src.QQ.QQutils.msg.pipeline import chat_pipeline
-from src.QQ.QQutils.msg.msgctx import MessageContext
+from src.QQ.QQutils.msg.send_msg import MessageSender
 from src.config.QQ_bot_info_loader import BotConfig
 from src.config.QQ_reply_settings import QQReplySettings
 from src.utils.chat.decider.emoji_decider import EmojiDecider
 from src.utils.chat.decider.reply_decider import ReplyDecider
 from src.utils.chat.role_chat import ChatDSAPI
+from src.utils.tools.resource_management.emoji_detector import EmojiDetector
 from src.utils.tools.resource_management.rand_pic import RandomPicture
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MessageContext:
+    bot: BotClient
+    msg: Union[GroupMessage, PrivateMessage]
+    session: "ChatSession"
+    msg_sender: "MessageSender"
+    recv_msg_wrapper: "RecvMessageWrapper"
+    config: "BotConfig"
+    tool_text: str
+    is_private: bool
+    session_id: str
 
 
 class ChatSession:
@@ -25,6 +44,9 @@ class ChatSession:
         self.llm_chater.init_role(config.name_zh)
         self.random_picture_provider = RandomPicture(config.paths.random_picture_dirs)
         self.qq_reply_settings = QQReplySettings(config.qq_id)
+        self.emoji_detector = EmojiDetector(
+            emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",
+        )
         logger.info(f"已为{'私聊' if is_private else '群聊'} {session_id} 初始化 AI 会话")
 
     # async def get_reply(self, text: str) -> str:

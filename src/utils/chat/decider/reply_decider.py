@@ -4,11 +4,12 @@ from pathlib import Path
 import ollama
 import re
 import random
-
+from dataclasses import dataclass
 from openai import OpenAI
 
 from src.config.QQ_bot_info_loader import BotConfig
 from src.config.path import PROMPT_DIR, API_KEY_DIR
+from src.utils.chat.model_type import LLMModelType
 from src.utils.chat.role_chat import ChatDSAPI
 from src.config.models import model_settings
 from src.utils.tools.file import load_from_txt
@@ -17,6 +18,23 @@ NO_REPLY_MESSAGES = [
     "呐，Coins-5 ~",
     "呆毛你好可爱吖",
 ]
+
+
+@dataclass(slots=True, frozen=True)
+class ReplyDecisionData:
+    """
+    回复判定结果。
+
+    Attributes
+    ----------
+    needs_reply : bool
+        是否需要回复。
+    reason : str
+        判定原因，可用于 Prompt、日志或调试。
+    """
+
+    needs_reply: bool
+    reason: str
 
 
 class ReplyDecider:
@@ -29,11 +47,11 @@ class ReplyDecider:
         self.name_en = config.name_en
         self.nickname = config.nickname
         self.qq_id = config.qq_id
-        if model_name is None:
-            self.model_name = model_settings.decide.get("name")
-        else:
-            self.model_name = model_name
-        self.model_type = model_settings.decide.get("type")
+        # if model_name is None:
+        #     self.model_name = model_settings.decide.get("name")
+        # else:
+        #     self.model_name = model_name
+        # self.model_type = model_settings.decide.get("type")
 
         path = Path(PROMPT_DIR) / f"{self.name_en}_reply_decision.txt"
         bot_role_prompt = ""
@@ -97,14 +115,14 @@ class ReplyDecider:
             "repeat_penalty": 1.1,
             "repeat_last_n": 64,
         }
-        if self.model_type == "api":
-            self.client = OpenAI(
-                api_key=load_from_txt(Path(API_KEY_DIR) / "deepseek.txt"),
-                base_url="https://api.deepseek.com"
-            )
+        # if self.model_type == "api":
+        self.client = OpenAI(
+            api_key=load_from_txt(Path(API_KEY_DIR) / "deepseek.txt"),
+            base_url="https://api.deepseek.com"
+        )
 
     @staticmethod
-    def _parse_response(response_text: str) -> tuple[bool, str]:
+    def _parse_response(response_text: str) -> ReplyDecisionData:
         """
         解析 JSON 输出
 
@@ -119,14 +137,14 @@ class ReplyDecider:
         try:
 
             data = json.loads(response_text)
-
-            reply = bool(data.get("reply", False))
-
-            reason = str(
-                data.get("reason", "")
-            ).strip()
-
-            return reply, reason
+            return ReplyDecisionData(
+                needs_reply=bool(
+                    data.get("reply", False)
+                ),
+                reason=str(
+                    data.get("reason", "")
+                ).strip()
+            )
 
         except Exception as e:
 
@@ -138,23 +156,29 @@ class ReplyDecider:
             text = response_text.lower()
 
             if re.search(r"\btrue\b", text):
-                return True, "JSON解析失败，降级匹配True"
+                return ReplyDecisionData(
+                    True,
+                    "JSON解析失败，降级匹配True"
+                )
 
             if re.search(r"\bfalse\b", text):
-                return False, "JSON解析失败，降级匹配False"
+                return ReplyDecisionData(
+                    False,
+                    "JSON解析失败，降级匹配False"
+                )
 
-            return (
+            return ReplyDecisionData(
                 random.random() < 0.2,
                 "模型输出异常，采用随机兜底策略"
             )
 
-    def _call_deepseek(self) -> tuple[bool, str]:
+    def _call_deepseek(self) -> ReplyDecisionData:
         """
         调用 DeepSeek JSON Output
         """
 
         response = self.client.chat.completions.create(
-            model=self.model_name,
+            model=LLMModelType.DS_FLASH.value,
             messages=self.history,
             response_format={
                 "type": "json_object"
@@ -169,7 +193,7 @@ class ReplyDecider:
         #     f"[ReplyDecider-API] 原始输出：\n{reply_content}"
         # )
 
-        needs_reply, reason = self._parse_response(
+        decision = self._parse_response(
             reply_content
         )
 
@@ -178,9 +202,16 @@ class ReplyDecider:
             "content": reply_content
         })
 
-        return needs_reply, reason
+        print(
+            f"[ReplyDecider] "
+            f"{self.name_zh} "
+            f"是否回复：{decision.needs_reply}    "
+            f"原因：{decision.reason}"
+        )
 
-    def check_if_should_reply(self, user_text: str) -> bool:
+        return decision
+
+    def check_if_should_reply(self, user_text: str) -> ReplyDecisionData:
         """
         判断是否应该回复
 
@@ -197,13 +228,11 @@ class ReplyDecider:
         """
 
         if not user_text:
-            return False
+            return ReplyDecisionData(needs_reply=False, reason="消息为空")
 
         if user_text in NO_REPLY_MESSAGES:
-            print(
-                f"[ReplyDecider] 消息 '{user_text}' 在 NO_REPLY_MESSAGES 中，直接返回 False"
-            )
-            return False
+            print(f"[ReplyDecider] 消息 '{user_text}' 在 NO_REPLY_MESSAGES 中，直接返回 False")
+            return ReplyDecisionData(needs_reply=False, reason="消息位于忽略列表")
 
         # 直接检测 @
         if (
@@ -211,116 +240,122 @@ class ReplyDecider:
                 or f"[CQ:at,qq={self.qq_id}]" in user_text
                 or f'At(qq="{self.qq_id}")' in user_text
         ):
-            print(
-                f"[ReplyDecider] 检测到 @ {self.qq_id}，直接回复。"
+            print(f"[ReplyDecider] 检测到 @ {self.qq_id}，直接回复。")
+            return ReplyDecisionData(
+                needs_reply=True,
+                reason=f"检测到@{self.qq_id}"
             )
 
-            self.history.append({
-                "role": "user",
-                "content": f"最新群聊消息：{user_text}"
-            })
+            # self.history.append({
+            #     "role": "user",
+            #     "content": f"最新群聊消息：{user_text}"
+            # })
+            #
+            # if self.model_type == "api":
+            #     self.history.append({
+            #         "role": "assistant",
+            #         "content": json.dumps(
+            #             {
+            #                 "reply": True,
+            #                 "reason": f"检测到@{self.qq_id}"
+            #             },
+            #             ensure_ascii=False
+            #         )
+            #     })
+            # else:
+            #     self.history.append({
+            #         "role": "assistant",
+            #         "content": "True"
+            #     })
+            #
+            # return True
 
-            if self.model_type == "api":
-                self.history.append({
-                    "role": "assistant",
-                    "content": json.dumps(
-                        {
-                            "reply": True,
-                            "reason": f"检测到@{self.qq_id}"
-                        },
-                        ensure_ascii=False
-                    )
-                })
-            else:
-                self.history.append({
-                    "role": "assistant",
-                    "content": "True"
-                })
-
-            return True
-
-        # 保存用户消息
-        self.history.append({
-            "role": "user",
-            "content": f"最新群聊消息：{user_text}"
-        })
+        # # 保存用户消息
+        # self.history.append({
+        #     "role": "user",
+        #     "content": f"最新群聊消息：{user_text}"
+        # })
 
         try:
 
-            ####################################################
-            # API
-            ####################################################
-            if self.model_type == "api":
+            # ####################################################
+            # # API
+            # ####################################################
+            # if self.model_type == "api":
 
-                needs_reply, reason = self._call_deepseek()
+            decision = self._call_deepseek()
 
-                print(
-                    f"[ReplyDecider-API] "
-                    f"{self.name_zh} "
-                    f"是否回复：{needs_reply}   "
-                    f"原因：{reason}"
-                )
+            # print(
+            #     f"[ReplyDecider-API] "
+            #     f"{self.name_zh} "
+            #     f"是否回复：{needs_reply}   "
+            #     f"原因：{reason}"
+            # )
 
-                return needs_reply
+            return decision
 
-            ####################################################
-            # Ollama
-            ####################################################
-            else:
-
-                response = ollama.chat(
-                    model=self.model_name,
-                    messages=self.history,
-                    options=self.options_local
-                )
-
-                reply_content = response["message"]["content"]
-
-                print(
-                    f"[ReplyDecider-本地模型] 原始输出：\n"
-                    f"{reply_content}"
-                )
-
-                text = reply_content.strip().lower()
-
-                if re.search(r"\btrue\b", text):
-                    needs_reply = True
-                elif re.search(r"\bfalse\b", text):
-                    needs_reply = False
-                else:
-                    needs_reply = (
-                            random.random() < 0.2
-                    )
-
-                print(
-                    f"[ReplyDecider-本地模型] "
-                    f"{self.name_zh} "
-                    f"是否回复：{needs_reply}"
-                )
-
-                self.history.append({
-                    "role": "assistant",
-                    "content": "True"
-                    if needs_reply
-                    else "False"
-                })
-
-                return needs_reply
+            # ####################################################
+            # # Ollama
+            # ####################################################
+            # else:
+            #
+            #     response = ollama.chat(
+            #         model=self.model_name,
+            #         messages=self.history,
+            #         options=self.options_local
+            #     )
+            #
+            #     reply_content = response["message"]["content"]
+            #
+            #     print(
+            #         f"[ReplyDecider-本地模型] 原始输出：\n"
+            #         f"{reply_content}"
+            #     )
+            #
+            #     text = reply_content.strip().lower()
+            #
+            #     if re.search(r"\btrue\b", text):
+            #         needs_reply = True
+            #     elif re.search(r"\bfalse\b", text):
+            #         needs_reply = False
+            #     else:
+            #         needs_reply = (
+            #                 random.random() < 0.2
+            #         )
+            #
+            #     print(
+            #         f"[ReplyDecider-本地模型] "
+            #         f"{self.name_zh} "
+            #         f"是否回复：{needs_reply}"
+            #     )
+            #
+            #     self.history.append({
+            #         "role": "assistant",
+            #         "content": "True"
+            #         if needs_reply
+            #         else "False"
+            #     })
+            #
+            #     return needs_reply
 
         except Exception as e:
 
             print(
                 f"[ReplyDecider] 调用模型失败：{e}"
             )
+            return ReplyDecisionData(
+                needs_reply=False,
+                reason="模型调用失败"
+            )
 
-            # 刚加入了一条 user，失败则删除，保持历史一致
-            if (
-                    self.history
-                    and self.history[-1]["role"] == "user"
-            ):
-                self.history.pop()
-
-            return False
+            # # 刚加入了一条 user，失败则删除，保持历史一致
+            # if (
+            #         self.history
+            #         and self.history[-1]["role"] == "user"
+            # ):
+            #     self.history.pop()
+            #
+            # return False
     # def _parse_response(self, response_text: str) -> bool:
     #     """
     #     辅助函数：处理大模型的输出，确保能正确解析出 True 或 False

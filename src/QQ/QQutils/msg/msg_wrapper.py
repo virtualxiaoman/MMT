@@ -70,7 +70,7 @@ class RecvMessageWrapper:
             elif seg_type == "Image":
                 summary = getattr(seg, "summary", "")
                 # QQ商城表情
-                if summary:
+                if summary and summary != "[动画表情]":
                     segments.append({
                         "index": len(segments),
                         "type": "qq_emoji",

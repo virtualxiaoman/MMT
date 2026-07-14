@@ -390,6 +390,7 @@ none
             if key in knowledge:
                 result[key] = knowledge[key]
 
+        print(f"[KnowledgeRetriever] 选择的知识条目有：{list(result.keys())}")
         return result
 
 
