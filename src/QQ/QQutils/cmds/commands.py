@@ -11,8 +11,8 @@ from src.config.QQ_bot_info_loader import BotConfig
 from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR, QQ_HISTORY_DIR, VOICE_DIR
 from src.utils.chat.role_chat import DeepSeekClient
 from src.utils.tools.file import load_from_txt
-from src.utils.tools.resource_management.specify_lyric import LyricRepository
-from src.utils.tools.resource_management.specify_music import MusicRepository
+from src.utils.tools.res.specify_lyric import LyricRepository
+from src.utils.tools.res.specify_music import MusicRepository
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -221,7 +221,7 @@ class DailyReportGenerator:
 
         self.bot_root = (
                 Path(QQ_HISTORY_DIR)
-                / str(config.qq_id)
+                / str(config.bot_id)
         )
 
         self.client = DeepSeekClient()

@@ -396,7 +396,7 @@ none
 
 if __name__ == "__main__":
     knowledge = KnowledgeLoader.load("LuoTianyi")
-    user_query = "洛天依什么时候发布的V5声库"
+    user_query = "介绍一下V5声库"
     selector_prompt = KnowledgeRetriever.build_prompt(
         query=user_query,
         knowledge=knowledge,

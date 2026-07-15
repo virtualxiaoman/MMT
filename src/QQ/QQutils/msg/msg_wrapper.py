@@ -156,7 +156,7 @@ class RecvMessageWrapper:
         return self.data["user_nickname"]
 
     @property
-    def text_msg(self) -> str:
+    def llm_msg(self) -> str:
         """
         提取适合LLM阅读的文本
         """
@@ -309,7 +309,7 @@ class SendMessageWrapper:
         return self.data["user_nickname"]
 
     @property
-    def text_msg(self):
+    def llm_msg(self):
         """
         与RecvMessageWrapper保持一致。
         """

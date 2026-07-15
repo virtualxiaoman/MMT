@@ -27,12 +27,13 @@ class LLMDSAPI:
 
     def __init__(
             self,
-            model: LLMModelType = LLMModelType.DS_PRO,
+            model: LLMModelType | str = LLMModelType.DS_PRO,
             enable_reasoning: bool = False,
             reasoning_effort: str = "high",
+            response_format: dict | None = None,
             api_key_path: str | Path | None = None,
-            base_url: str = "https://api.deepseek.com",
             temperature: float = 1.3,
+            max_tokens: int = 8192
     ):
         """
         Parameters
@@ -52,8 +53,6 @@ class LLMDSAPI:
         api_key_path
             API Key 文件。
 
-        base_url
-            API 地址。
 
         temperature
             温度。
@@ -67,13 +66,19 @@ class LLMDSAPI:
 
         self.client = OpenAI(
             api_key=load_from_txt(api_key_path),
-            base_url=base_url,
+            base_url="https://api.deepseek.com",
         )
-
-        self.model = model
+        if isinstance(model, LLMModelType):
+            self.model = model.value
+        elif isinstance(model, str):
+            self.model = model
+        else:
+            raise ValueError(f"model: {type(model)}类型错误")
         self.enable_reasoning = enable_reasoning
         self.reasoning_effort = reasoning_effort
         self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.response_format = response_format
 
     # ------------------------------------------------------------------
 
@@ -110,7 +115,7 @@ class LLMDSAPI:
         """
 
         kwargs = {
-            "model": self.model.value,
+            "model": self.model,
             "messages": messages,
             "stream": False,
         }
@@ -134,6 +139,12 @@ class LLMDSAPI:
                     "type": "enabled"
                 }
             }
+
+        if self.response_format:
+            kwargs["response_format"] = self.response_format
+
+        if isinstance(self.max_tokens, int) and self.max_tokens > 0:
+            kwargs["max_tokens"] = self.max_tokens
 
         response = self.client.chat.completions.create(**kwargs)
 

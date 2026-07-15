@@ -11,7 +11,7 @@ from src.utils.chat.role_chat import ChatDSAPI
 from src.utils.chat.decider.reply_decider import ReplyDecider
 from src.utils.chat.decider.emoji_decider import EmojiDecider
 from src.utils.chat.decider.voice_decider import VoiceDecider
-from src.utils.tools.resource_management.rand_pic import RandomPicture
+from src.utils.tools.res.rand_pic import RandomPicture
 
 # todo 戳一戳 https://github.com/liyihao1110/ncatbot/issues/231
 

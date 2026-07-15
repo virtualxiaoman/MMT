@@ -14,8 +14,8 @@ from src.config.QQ_reply_settings import QQReplySettings
 from src.utils.chat.decider.emoji_decider import EmojiDecider
 from src.utils.chat.decider.reply_decider import ReplyDecider
 from src.utils.chat.role_chat import ChatDSAPI
-from src.utils.tools.resource_management.emoji_detector import EmojiDetector
-from src.utils.tools.resource_management.rand_pic import RandomPicture
+from src.utils.tools.res.emoji_detector import EmojiDetector
+from src.utils.tools.res.rand_pic import RandomPicture
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class ChatSession:
         self.emoji_decider = EmojiDecider()
         self.llm_chater.init_role(config.name_zh)
         self.random_picture_provider = RandomPicture(config.paths.random_picture_dirs)
-        self.qq_reply_settings = QQReplySettings(config.qq_id)
+        self.qq_reply_settings = QQReplySettings(config.bot_id)
         self.emoji_detector = EmojiDetector(
             emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",
         )
@@ -72,7 +72,7 @@ class ChatSession:
             func = partial(
                 chat_pipeline,
                 name_en=ctx.config.name_en,
-                bot_id=ctx.config.qq_id,
+                bot_id=ctx.config.bot_id,
                 is_private=ctx.is_private,
                 session_id=ctx.session_id,
                 query=text

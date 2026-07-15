@@ -40,7 +40,7 @@ class HistoryLogger:
     """
 
     def __init__(self, config):
-        self.bot_id = str(config.qq_id)
+        self.bot_id = str(config.bot_id)
         self.root = Path(QQ_HISTORY_DIR) / self.bot_id
 
     # ==========================================================
@@ -217,7 +217,7 @@ class HistoryLogger:
                 "a",
                 encoding="utf-8"
         ) as f:
-            f.write(wrapper.text_msg)
+            f.write(wrapper.llm_msg)
             f.write("\n")
 
     # ==========================================================

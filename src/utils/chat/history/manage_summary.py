@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from pathlib import Path
 
-from src.QQ.QQutils.resource_management.history_loader import HistoryLoader
+from src.QQ.QQutils.res.history_loader import HistoryLoader
 from src.utils.chat.llm.run_prompt import PromptRunner
 from src.config.path import QQ_HISTORY_DIR
 

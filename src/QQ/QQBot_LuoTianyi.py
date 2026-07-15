@@ -13,8 +13,9 @@ from src.QQ.QQutils.msg.chat_session import ChatSession, MessageContext
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
 from src.QQ.QQutils.msg.send_msg import MessageSender
-from src.QQ.QQutils.resource_management.history_storage import HistoryLogger
-from src.QQ.QQutils.resource_management.image_storage import ImageStorage
+from src.QQ.QQutils.res.history_loader import HistoryLoader
+from src.QQ.QQutils.res.history_storage import HistoryLogger
+from src.QQ.QQutils.res.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
 from src.utils.chat.decider.reply_decider import ReplyDecisionData
 
@@ -35,7 +36,7 @@ class BotManager:
         self.bot = bot  # BotClient 实例
         self.sessions: Dict[str, ChatSession] = {}  # 统一存储所有会话，key是 "group_111" 或 "private_111" 以防冲突
         self.msg_sender: MessageSender | None = None  # 当前消息的 sender 对象，后续发送消息都通过它来调用 API
-        self.image_storage = ImageStorage(bot_id=CONFIG.qq_id)
+        self.image_storage = ImageStorage(bot_id=CONFIG.bot_id)
         self.history_logger = HistoryLogger(CONFIG)
 
         # self.image_describer = ImageDescriber()
@@ -91,7 +92,7 @@ class BotManager:
         # =========================
         recv_msg_wrapper = RecvMessageWrapper(msg)
         recv_msg_wrapper.process_content()
-        print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.text_msg}\n"
+        print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.llm_msg}\n"
               f"工具类输入消息：{recv_msg_wrapper.tool_msg}")
         recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)  # 保存图片
         self.history_logger.append_recv(msg, recv_msg_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
@@ -119,7 +120,10 @@ class BotManager:
         # =========================
         # 3. 判断是否回复
         # =========================
-        decision = await self._should_reply(ctx)
+        history_msg = HistoryLoader.load_last(bot_id=CONFIG.bot_id, is_private=is_private, session_id=session_id,
+                                              max_lines=20)
+
+        decision = await self._should_reply(ctx, history_msg)
         if not await self.__decision_to_bool(decision):
             logger.info(f"决定不回复这条消息")
             return
@@ -127,7 +131,7 @@ class BotManager:
         # =========================
         # 4. 回复
         # =========================
-        ai_reply = await session.get_reply(ctx=ctx, text=recv_msg_wrapper.text_msg)  # 生成回复
+        ai_reply = await session.get_reply(ctx=ctx, text=recv_msg_wrapper.llm_msg)  # 生成回复
         emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.3)  # 表情包路径
 
         text_msg_id = await msg_sender.text(ai_reply)  # 先发送文本回复
@@ -140,7 +144,7 @@ class BotManager:
         # =========================
         # 5. 存储回复消息
         # =========================
-        builder = SendMessageBuilder(recv_msg_wrapper, bot_id=str(CONFIG.qq_id), bot_name=CONFIG.name_zh)
+        builder = SendMessageBuilder(recv_msg_wrapper, bot_id=str(CONFIG.bot_id), bot_name=CONFIG.name_zh)
         send_wrappers = list()
         send_wrappers.append(builder.text(message_id=text_msg_id, text=ai_reply))
         if image_msg_id:
@@ -158,13 +162,13 @@ class BotManager:
         """
         return session.qq_reply_settings.can_reply(session.session_id, is_private)
 
-    async def _should_reply(self, ctx: MessageContext) -> ReplyDecisionData:
+    async def _should_reply(self, ctx: MessageContext, history_msg: str) -> ReplyDecisionData:
         """
         判定是否回复：看回复类型，私聊默认回复，群聊由 decider 判定
         """
         if ctx.is_private:
             return ReplyDecisionData(
-                needs_reply=True,
+                needs_reply="required",
                 reason="私聊默认回复"
             )  # 私聊除非被拉黑，不然就默认回复
         image_url = ctx.recv_msg_wrapper.image_urls
@@ -175,35 +179,23 @@ class BotManager:
             print(f"{image_url} is emoji: {is_emoji}")
             if is_emoji:
                 return ReplyDecisionData(
-                    needs_reply=False,
+                    needs_reply="skip",
                     reason="只是表情包，不回复"
                 )  # 如果是表情包就不回复
-        return ctx.session.reply_decider.check_if_should_reply(ctx.recv_msg_wrapper.text_msg)  # 群聊还要由模型判定是否回复
+        # 群聊还要由模型判定是否回复
+        return ctx.session.reply_decider.check_if_should_reply(ctx.recv_msg_wrapper.llm_msg, history_msg)
 
     @staticmethod
     async def __decision_to_bool(decision: ReplyDecisionData) -> bool:
         """
         将 ReplyDecisionData 转换为最终是否回复。
-
-        Parameters
-        ----------
-        decision : ReplyDecisionData
-            回复判定结果。
-
-        Returns
-        -------
-        bool
-            True：回复。
-            False：不回复。
         """
-
         if decision.needs_reply == "required":
             return True
-
         if decision.needs_reply == "skip":
             return False
-
         return random.random() < max(0.0, min(1.0, decision.probability))
+
 
 # ========== 运行部分 ==========
 
@@ -222,4 +214,4 @@ async def on_private_message(msg: PrivateMessage):
 
 
 if __name__ == "__main__":
-    bot_client.run(bt_uin=CONFIG.qq_id)
+    bot_client.run(bt_uin=CONFIG.bot_id)

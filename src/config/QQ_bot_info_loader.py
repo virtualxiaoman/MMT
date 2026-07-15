@@ -17,7 +17,7 @@ class BotConfig:
     name_zh: str
     name_en: str
     nickname: list[str]
-    qq_id: int
+    bot_id: int
     admin_qq_id: int
     paths: BotPaths
 
@@ -48,7 +48,7 @@ class BotInfoConfigLoader:
             name_zh=data["name_zh"],
             name_en=data["name_en"],
             nickname=data["nickname"],
-            qq_id=data["qq_id"],
+            bot_id=data["bot_id"],
             admin_qq_id=data.get("admin_qq_id", []),
             paths=paths
         )
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     config = BotInfoConfigLoader.load("LuoTianyi")
 
     print(config.name_zh)
-    print(config.qq_id)
+    print(config.bot_id)
 
     print(config.paths.music_dirs)
     print(config.paths.random_picture_dirs)

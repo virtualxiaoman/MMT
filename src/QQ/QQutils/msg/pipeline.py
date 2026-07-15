@@ -126,7 +126,7 @@ class ChatPipeline:
                 knowledge_context,
             )
         )
-        print(system_prompt)
+        # print(system_prompt)
 
         # --------------------------------
         # 4. 创建Conversation
