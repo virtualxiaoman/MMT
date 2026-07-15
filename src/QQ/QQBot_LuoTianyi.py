@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import time
 from pathlib import Path
 from typing import Dict
@@ -71,22 +72,11 @@ class BotManager:
         #     message_id="1311274050", emoji_id="424", set=True
         # )
 
-        # user_raw_text = msg.raw_message.strip()
-        # print(msg)
         is_private = isinstance(msg, PrivateMessage)
         session_id = str(msg.user_id if is_private else msg.group_id)
         session = self.get_session(session_id, is_private)
         session.session_id = session_id
         logger.info(f"收到消息 type={'private' if is_private else 'group'}, id={session_id}")
-        # if not user_raw_text:
-        #     return  # 个人觉得空格也不应该被直接丢弃
-
-        # user_raw_text = (
-        #     self.message_normalizer
-        #     .normalize(msg)
-        #     .strip()
-        # )
-        # print(user_raw_text)
 
         # =========================
         # 1. 是否能回复（不在黑名单里）
@@ -96,7 +86,11 @@ class BotManager:
             logger.info(f"黑名单用户/群不回复")
             return
 
+        # =========================
+        # 2. 格式化消息，处理多模态数据，建立ctx
+        # =========================
         recv_msg_wrapper = RecvMessageWrapper(msg)
+        recv_msg_wrapper.process_content()
         print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.text_msg}\n"
               f"工具类输入消息：{recv_msg_wrapper.tool_msg}")
         recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)  # 保存图片
@@ -125,8 +119,8 @@ class BotManager:
         # =========================
         # 3. 判断是否回复
         # =========================
-        decision = await self._should_reply(session, is_private, recv_msg_wrapper)
-        if not decision.needs_reply:
+        decision = await self._should_reply(ctx)
+        if not await self.__decision_to_bool(decision):
             logger.info(f"决定不回复这条消息")
             return
 
@@ -146,12 +140,7 @@ class BotManager:
         # =========================
         # 5. 存储回复消息
         # =========================
-        builder = SendMessageBuilder(
-            recv_msg_wrapper,
-            bot_id=str(CONFIG.qq_id),
-            bot_name=CONFIG.name_zh,
-        )
-
+        builder = SendMessageBuilder(recv_msg_wrapper, bot_id=str(CONFIG.qq_id), bot_name=CONFIG.name_zh)
         send_wrappers = list()
         send_wrappers.append(builder.text(message_id=text_msg_id, text=ai_reply))
         if image_msg_id:
@@ -169,29 +158,52 @@ class BotManager:
         """
         return session.qq_reply_settings.can_reply(session.session_id, is_private)
 
-    async def _should_reply(self, session: ChatSession, is_private: bool,
-                            recv_msg_wrapper: RecvMessageWrapper) -> ReplyDecisionData:
+    async def _should_reply(self, ctx: MessageContext) -> ReplyDecisionData:
         """
         判定是否回复：看回复类型，私聊默认回复，群聊由 decider 判定
         """
-        if is_private:
+        if ctx.is_private:
             return ReplyDecisionData(
                 needs_reply=True,
                 reason="私聊默认回复"
             )  # 私聊除非被拉黑，不然就默认回复
-        image_url = recv_msg_wrapper.image_urls
+        image_url = ctx.recv_msg_wrapper.image_urls
         # print(f"[_should_reply] 图片数量：{len(image_url)}")
         # 检查有多少张图片，如果只有一张才进行表情包检测
         if len(image_url) == 1:
-            is_emoji = session.emoji_detector.is_emoji(image_url[0])
+            is_emoji = ctx.session.emoji_detector.is_emoji(image_url[0])
             print(f"{image_url} is emoji: {is_emoji}")
             if is_emoji:
                 return ReplyDecisionData(
                     needs_reply=False,
                     reason="只是表情包，不回复"
                 )  # 如果是表情包就不回复
-        return session.reply_decider.check_if_should_reply(recv_msg_wrapper.text_msg)  # 群聊还要由模型判定是否回复
+        return ctx.session.reply_decider.check_if_should_reply(ctx.recv_msg_wrapper.text_msg)  # 群聊还要由模型判定是否回复
 
+    @staticmethod
+    async def __decision_to_bool(decision: ReplyDecisionData) -> bool:
+        """
+        将 ReplyDecisionData 转换为最终是否回复。
+
+        Parameters
+        ----------
+        decision : ReplyDecisionData
+            回复判定结果。
+
+        Returns
+        -------
+        bool
+            True：回复。
+            False：不回复。
+        """
+
+        if decision.needs_reply == "required":
+            return True
+
+        if decision.needs_reply == "skip":
+            return False
+
+        return random.random() < max(0.0, min(1.0, decision.probability))
 
 # ========== 运行部分 ==========
 
