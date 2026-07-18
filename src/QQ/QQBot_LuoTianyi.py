@@ -36,29 +36,19 @@ class BotManager:
     def __init__(self, bot: BotClient):
         self.bot = bot  # BotClient 实例
         self.sessions: Dict[str, ChatSession] = {}  # 统一存储所有会话，key是 "group_111" 或 "private_111" 以防冲突
-        self.msg_sender: MessageSender | None = None  # 当前消息的 sender 对象，后续发送消息都通过它来调用 API
+        # self.msg_sender: MessageSender | None = None  # 当前消息的 sender 对象，后续发送消息都通过它来调用 API
         self.image_storage = ImageStorage(bot_id=CONFIG.bot_id)
-        self.history_logger = HistoryLogger(CONFIG)
+        # self.history_logger = HistoryLogger(CONFIG)
 
         # self.image_describer = ImageDescriber()
         # self.message_normalizer = MessageNormalizer(self.image_describer)
 
         self.registry = CommandRegistry()
-        self.registry.register(ImageCommand())
-        self.registry.register(MusicCommand(CONFIG.paths.music_dirs))
-        self.registry.register(HelpCommand())
-        self.registry.register(CheckinCommand())
-        self.registry.register(LyricCommand(CONFIG.paths.lyric_dirs))
-        self.registry.register(DailyReportCommand())
-        self.registry.register(BanCommand())
-        self.registry.register(MorningCommand())
-        self.registry.register(ImageGeneratorCommand(CONFIG))
-        self.registry.register(UpdateMemoryCommand())
+        self._init_registry()
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
         key = f"{prefix}{session_id}"
-
         if key not in self.sessions:
             self.sessions[key] = ChatSession(session_id, is_private, CONFIG)
         return self.sessions[key]
@@ -98,9 +88,11 @@ class BotManager:
         print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.llm_msg}\n"
               f"工具类输入消息：{recv_msg_wrapper.tool_msg}")
         recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)  # 保存图片
-        self.history_logger.append_recv(msg, recv_msg_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
 
-        msg_sender = MessageSender(self.bot, msg)
+        history_logger = HistoryLogger(config=CONFIG)
+        history_logger.append_recv(msg, recv_msg_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
+
+        msg_sender = MessageSender(self.bot, session_id=session_id, is_private=is_private)
         ctx = MessageContext(
             bot=self.bot,
             msg=msg,
@@ -114,48 +106,28 @@ class BotManager:
         )
 
         # =========================
-        # 2. 工具类指令
+        # 3. 工具类指令
         # =========================
         handled = await self.registry.dispatch(ctx)
         if handled:
             return
 
         # =========================
-        # 3. 判断是否回复
+        # 调用计时器+计数器回复消息的逻辑
         # =========================
-        history_msg = HistoryLoader.load_last(bot_id=CONFIG.bot_id, is_private=is_private, session_id=session_id,
-                                              max_lines=20)
+        await session.reply_scheduler.on_new_message(ctx)
 
-        decision = await self._should_reply(ctx, history_msg)
-        if not await self.__decision_to_bool(decision):
-            logger.info(f"决定不回复这条消息{recv_msg_wrapper.tool_msg[:10]}")
-            return
-
-        # =========================
-        # 4. 回复
-        # =========================
-        ai_reply = await session.get_reply(ctx=ctx, text=recv_msg_wrapper.llm_msg)  # 生成回复
-        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.2)  # 表情包路径
-
-        text_msg_id = await msg_sender.text(ai_reply)  # 先发送文本回复
-        if emoji_path:
-            image_msg_id = await msg_sender.image(emoji_path)  # 如果有表情路径，再发送表情
-        else:
-            image_msg_id = None
-        # todo 语音回复
-
-        # =========================
-        # 5. 存储回复消息
-        # =========================
-        builder = SendMessageBuilder(recv_msg_wrapper.session_id, recv_msg_wrapper.is_private,
-                                     bot_id=str(CONFIG.bot_id), bot_name=CONFIG.name_zh)
-        send_wrappers = list()
-        send_wrappers.append(builder.text(message_id=text_msg_id, text=ai_reply))
-        if image_msg_id:
-            send_wrappers.append(builder.image(message_id=image_msg_id, file=emoji_path,
-                                               content=Path(emoji_path).stem))
-        for send_wrapper in send_wrappers:
-            self.history_logger.append_send(send_wrapper)  # 保存消息（LLMinput+人类可读）
+    def _init_registry(self):
+        self.registry.register(ImageCommand())
+        self.registry.register(MusicCommand(CONFIG.paths.music_dirs))
+        self.registry.register(HelpCommand())
+        self.registry.register(CheckinCommand())
+        self.registry.register(LyricCommand(CONFIG.paths.lyric_dirs))
+        self.registry.register(DailyReportCommand())
+        self.registry.register(BanCommand())
+        self.registry.register(MorningCommand())
+        self.registry.register(ImageGeneratorCommand(CONFIG))
+        self.registry.register(UpdateMemoryCommand())
 
     async def _can_reply(self, session: ChatSession, is_private: bool) -> bool:
         """
@@ -165,40 +137,6 @@ class BotManager:
         :return:
         """
         return session.qq_reply_settings.can_reply(session.session_id, is_private)
-
-    async def _should_reply(self, ctx: MessageContext, history_msg: str) -> ReplyDecisionData:
-        """
-        判定是否回复：看回复类型，私聊默认回复，群聊由 decider 判定
-        """
-        if ctx.is_private:
-            return ReplyDecisionData(
-                needs_reply="required",
-                reason="私聊默认回复"
-            )  # 私聊除非被拉黑，不然就默认回复
-        image_url = ctx.recv_msg_wrapper.image_urls
-        # print(f"[_should_reply] 图片数量：{len(image_url)}")
-        # 检查有多少张图片，如果只有一张才进行表情包检测
-        if len(image_url) == 1:
-            is_emoji = ctx.session.emoji_detector.is_emoji(image_url[0])
-            print(f"{image_url} is emoji: {is_emoji}")
-            if is_emoji:
-                return ReplyDecisionData(
-                    needs_reply="skip",
-                    reason="只是表情包，不回复"
-                )  # 如果是表情包就不回复
-        # 群聊还要由模型判定是否回复
-        return ctx.session.reply_decider.check_if_should_reply(ctx.recv_msg_wrapper.llm_msg, history_msg)
-
-    @staticmethod
-    async def __decision_to_bool(decision: ReplyDecisionData) -> bool:
-        """
-        将 ReplyDecisionData 转换为最终是否回复。
-        """
-        if decision.needs_reply == "required":
-            return True
-        if decision.needs_reply == "skip":
-            return False
-        return random.random() < max(0.0, min(1.0, decision.probability))
 
 
 # ========== 运行部分 ==========
