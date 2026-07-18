@@ -43,8 +43,8 @@ class ReplyScheduler:
 
     整个 Session 同时只会存在一个等待 Task。
     """
-    WAIT_SECONDS = 8  # 最后一条消息静默多少秒后回复
-    MAX_PENDING = 5  # 连续收到多少条消息立即回复
+    WAIT_SECONDS = 5  # 最后一条消息静默多少秒后回复
+    MAX_PENDING = 3  # 连续收到多少条消息立即回复
     CHECK_INTERVAL = 0.2  # 后台 Task 检查间隔
 
     def __init__(self, callback: Callable[[MessageContext, ReplyTrigger], Awaitable[None]]):

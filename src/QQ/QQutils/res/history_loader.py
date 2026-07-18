@@ -303,6 +303,174 @@ class HistoryLoader:
 
                 yield day, file
 
+    @classmethod
+    def count(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+    ) -> int:
+        """
+        获取当前 Session 总消息数量。
+        用于 SummaryManager 判断是否需要更新 short_term。
+        """
+        total = 0
+        for _, file in cls.iter_files(
+                bot_id,
+                is_private,
+                session_id,
+        ):
+            history = cls._read_all(file)
+            total += len(cls._split_messages(history))
+        return total
+
+    @classmethod
+    def count_today(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+    ) -> int:
+        """
+        获取当前 Session 总消息数量。
+        用于 SummaryManager 判断是否需要更新 short_term。
+        """
+        return len(
+            cls.load_today_list(
+                bot_id,
+                is_private,
+                session_id,
+            )
+        )
+
+    @classmethod
+    def load_range(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+            start: int,
+            end: int,
+    ) -> str:
+        """
+        按全局消息索引读取历史。
+
+        参数：
+            start:
+                起始消息编号（包含）
+
+            end:
+                结束消息编号（不包含）
+
+        例如：
+
+            load_range(100, 150)
+
+        返回第100~149条消息。
+
+        """
+
+        if start < 0:
+            raise ValueError("start不能小于0")
+
+        if end <= start:
+            return ""
+
+        result = []
+
+        index = 0
+
+        for _, file in cls.iter_files(
+                bot_id,
+                is_private,
+                session_id,
+        ):
+
+            history = cls._read_all(file)
+
+            messages = cls._split_messages(history)
+
+            for message in messages:
+
+                if index >= end:
+                    break
+
+                if index >= start:
+                    result.append(message)
+
+                index += 1
+
+            if index >= end:
+                break
+
+        return "\n".join(result)
+
+    @classmethod
+    def load_today_range(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+            start: int,
+            end: int,
+    ) -> str:
+
+        messages = cls.load_today_list(
+            bot_id,
+            is_private,
+            session_id,
+        )
+        if start < end:
+            return "\n".join(
+                messages[start:end]
+            )
+        else:
+            return None
+
+    @classmethod
+    def get_first_date(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+    ) -> date | None:
+        """
+        获取当前 Session 最早的聊天日期。
+
+        Returns
+        -------
+        date | None
+            如果不存在聊天记录，则返回 None。
+        """
+
+        for day, _ in cls.iter_files(bot_id, is_private, session_id):
+            return day
+
+        return None
+
+    @classmethod
+    def get_last_date(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+    ) -> date | None:
+        """
+        获取当前 Session 最新的聊天日期。
+
+        Returns
+        -------
+        date | None
+            如果不存在聊天记录，则返回 None。
+        """
+
+        last_day = None
+
+        for day, _ in cls.iter_files(bot_id, is_private, session_id):
+            last_day = day
+
+        return last_day
+
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------

@@ -56,7 +56,7 @@ class ChatPipeline:
             session_id: str,
             system_prompt: str,
             name_en: Optional[str] = None,
-            memory_manager: Optional[SummaryManager] = None,
+            summary_manager: Optional[SummaryManager] = None,
             name_zh: Optional[str] = None,
     ):
 
@@ -66,7 +66,7 @@ class ChatPipeline:
 
         self.llm = LLMDSAPI(model=LLMModelType.DS_PRO)
         self.base_system_prompt = system_prompt
-        self.memory_manager = memory_manager
+        self.summary_manager = summary_manager
 
         self.knowledge = None
         if name_en:
@@ -95,17 +95,19 @@ class ChatPipeline:
         # conv.add_user(user_query)
         # 7. 调用LLM
         reply = self.llm.one_chat(conv.messages)
+        # 8. 同步summary
+        self.summary_manager.sync()
         return reply
 
     # ======================================================
     # Memory
     # ======================================================
     def _get_memory(self):
-        if self.memory_manager is None:
+        if self.summary_manager is None:
             return None
         return {
-            "long_term": self.memory_manager.load_long_term(),
-            "short_term": self.memory_manager.load_short_term()
+            "long_term": self.summary_manager.load_long_term(),
+            "short_term": self.summary_manager.load_short_term()
         }
 
     # ======================================================
@@ -141,14 +143,19 @@ class ChatPipeline:
         )
 
     def _append_history(self, conv: ConversationManager) -> None:
+        buffer = []
         for msg in self._get_history():
             prefix, content = msg.split("：", 1)
             _, speaker = prefix.split("] ", 1)
-
             if speaker == self.name_zh:
+                if buffer:
+                    conv.add_user("\n".join(buffer))
+                    buffer.clear()
                 conv.add_assistant(content)
             else:
-                conv.add_user(msg)
+                buffer.append(f"{speaker}：{content}")
+        if buffer:
+            conv.add_user("\n".join(buffer))
 
 
 if __name__ == "__main__":
@@ -176,7 +183,7 @@ if __name__ == "__main__":
         session_id=session_id,
         system_prompt=prompt,
         name_en="LuoTianyi",
-        memory_manager=manager,
+        summary_manager=manager,
     )
     reply = pipeline.chat(
         "洛天依什么时候发布的V5声库"

@@ -188,7 +188,7 @@ def chat_pipeline(ctx: MessageContext, query: str):
     generator = SummaryGenerator(runner)
     manager = SummaryManager(bot_id=bot_id, is_private=is_private, session_id=session_id, generator=generator)
     pipeline = ChatPipeline(bot_id=bot_id, is_private=is_private, session_id=session_id,
-                            system_prompt=role_prompt, name_en=name_en, memory_manager=manager,
+                            system_prompt=role_prompt, name_en=name_en, summary_manager=manager,
                             name_zh=ctx.config.name_zh)
     reply = pipeline.chat(query)
     print(reply)

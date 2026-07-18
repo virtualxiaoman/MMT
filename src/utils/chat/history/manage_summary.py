@@ -1,6 +1,7 @@
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
+import json
 
 from src.QQ.QQutils.res.history_loader import HistoryLoader
 from src.utils.chat.llm.run_prompt import PromptRunner
@@ -81,6 +82,8 @@ class SummaryManager:
     LONG_TERM_FILE = "long_term.txt"
     SHORT_TERM_FILE = "short_term.txt"
     DAILY_DIR_NAME = "daily"
+    METADATA_FILE = "metadata.json"
+    SHORT_INTERVAL = 50
 
     def __init__(
             self,
@@ -109,9 +112,14 @@ class SummaryManager:
         self.is_private = is_private
         self.session_id = session_id
         self.generator = generator
+
         self.summary_dir = self._get_session_dir() / self.SUMMARY_DIR_NAME
         self.daily_dir = self.summary_dir / self.DAILY_DIR_NAME
+        self.metadata_path = self.summary_dir / self.METADATA_FILE
+        print(f"metadata_path={self.metadata_path}")
+
         self._ensure_dirs()
+        self._init_metadata()
 
     # ============================================================
     # 初始化
@@ -174,6 +182,7 @@ class SummaryManager:
             new_summary = self.generator.merge_summary(old_summary, recent_history)
         if new_summary:
             self._save_short_term(new_summary)
+            print("[update_short_term] 更新recent_history完成")
 
     # ============================================================
     # Update Daily
@@ -194,6 +203,7 @@ class SummaryManager:
         summary = self.generator.generate_recent_summary(history)
         if summary:
             self._save_daily(target_date, summary)
+            print(f"[update_daily] 更新{target_date}完成")
 
     # ============================================================
     # Update Long Term
@@ -220,6 +230,7 @@ class SummaryManager:
             new_long_term = self.generator.merge_summary(old_long_term, daily_summary)
         if new_long_term:
             self._save_long_term(new_long_term)
+            print(f"[update_long_term] 更新{target_date}完成")
 
     # ============================================================
     # Rebuild
@@ -245,6 +256,7 @@ class SummaryManager:
                 long_term = (self.generator.merge_summary(long_term, daily_summary))
 
         self._save_long_term(long_term)
+        print(f"[rebuild_long_term] 更新完成")
 
     # ============================================================
     # Load
@@ -254,7 +266,7 @@ class SummaryManager:
         """
         读取长期摘要。
         """
-        path = (self.summary_dir / self.LONG_TERM_FILE)
+        path = self.summary_dir / self.LONG_TERM_FILE
         if not path.exists():
             self.initialize_long_term()
         return self._read_text(path)
@@ -263,7 +275,7 @@ class SummaryManager:
         """
         读取短期摘要。
         """
-        path = (self.summary_dir / self.SHORT_TERM_FILE)
+        path = self.summary_dir / self.SHORT_TERM_FILE
         if not path.exists():
             self.initialize_short_term()
         return self._read_text(path)
@@ -272,7 +284,7 @@ class SummaryManager:
         """
         读取指定日期摘要。
         """
-        path = (self.daily_dir / f"{target_date.strftime('%Y-%m-%d')}.txt")
+        path = self.daily_dir / f"{target_date.strftime('%Y-%m-%d')}.txt"
         result = self._read_text(path)
         if result:
             return result
@@ -280,6 +292,198 @@ class SummaryManager:
             print(f"[load_daily] {target_date}无数据，正在重新生成")
             self.update_daily(target_date)
             self.load_daily(target_date)
+
+    def sync(self) -> None:
+        """
+        同步所有Summary。
+
+        调用时机：
+            每次聊天结束后调用一次。
+        """
+        print("_sync_short_term")
+        self._sync_short_term()
+        print("_sync_daily")
+        self._sync_daily()
+        print("_sync_long_term")
+        self._sync_long_term()
+
+    # ============================================================
+    # Short Term
+    # ============================================================
+
+    def _sync_short_term(self) -> None:
+        today = datetime.now().date()
+        current_count = self._get_message_count()
+        metadata = self._load_metadata()
+        last_date = metadata.get(
+            "short_last_date"
+        )
+        last_count = metadata.get(
+            "last_short_message_count",
+            0,
+        )
+        if last_date != str(today):
+            print(f"last_date={last_date}, today={today}")
+            last_count = 0
+        if current_count - last_count < self.SHORT_INTERVAL:
+            return
+
+        history = HistoryLoader.load_today_range(
+            self.bot_id,
+            self.is_private,
+            self.session_id,
+            start=last_count,
+            end=current_count,
+        )
+        old_summary = self.load_short_term()
+
+        if old_summary:
+            summary = self.generator.merge_summary(
+                old_summary,
+                history,
+            )
+        else:
+            summary = self.generator.generate_recent_summary(history)
+
+        if summary:
+            self._save_short_term(summary)
+            metadata["short_last_date"] = str(today)
+            metadata["last_short_message_count"] = current_count
+            self._save_metadata(metadata)
+        else:
+            print("[_sync_short_term] summary生成失败")
+
+    # ============================================================
+    # Daily
+    # ============================================================
+
+    def _sync_daily(self) -> None:
+        metadata = self._load_metadata()
+        last_date = metadata.get(
+            "last_daily_date"
+        )
+        if last_date:
+            last_date = date.fromisoformat(last_date)
+        else:
+            last_date = HistoryLoader.get_first_date(bot_id=self.bot_id, session_id=self.session_id,
+                                                     is_private=self.is_private)
+            if last_date is None:
+                return
+
+        yesterday = datetime.now().date() - timedelta(days=1)
+
+        while last_date < yesterday:
+            target = last_date + timedelta(days=1)
+
+            self.update_daily(target)
+
+            last_date = target
+
+            metadata["last_daily_date"] = (
+                target.isoformat()
+            )
+
+            self._save_metadata(metadata)
+
+    # ============================================================
+    # Long Term
+    # ============================================================
+
+    def _sync_long_term(self) -> None:
+
+        metadata = self._load_metadata()
+
+        last_date = metadata.get(
+            "last_long_date"
+        )
+
+        if last_date:
+            last_date = date.fromisoformat(last_date)
+        else:
+            last_date = HistoryLoader.get_first_date(bot_id=self.bot_id, session_id=self.session_id,
+                                                     is_private=self.is_private)
+            if last_date is None:
+                return
+
+        daily_dates = sorted(
+            self.daily_dir.glob("*.txt")
+        )
+
+        for file in daily_dates:
+
+            current = date.fromisoformat(
+                file.stem
+            )
+
+            if current <= last_date:
+                continue
+
+            daily_summary = self._read_text(file)
+
+            if not daily_summary:
+                continue
+
+            old = self.load_long_term()
+
+            if old:
+                new = self.generator.merge_summary(
+                    old,
+                    daily_summary,
+                )
+            else:
+                new = daily_summary
+
+            if new:
+                self._save_long_term(new)  # 确保融合后有实质内容再覆盖保存
+
+                metadata["last_long_date"] = (
+                    current.isoformat()
+                )
+
+                self._save_metadata(metadata)
+
+    # ============================================================
+    # Metadata
+    # ============================================================
+
+    def _init_metadata(self):
+
+        if self.metadata_path.exists():
+            return
+
+        self._save_metadata(
+            {
+                "last_short_message_count": 0,
+                "short_last_date": None,
+                "last_daily_date": None,
+                "last_long_date": None,
+            }
+        )
+
+    def _load_metadata(self) -> dict:
+
+        if not self.metadata_path.exists():
+            self._init_metadata()
+
+        return json.loads(
+            self.metadata_path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+    def _save_metadata(
+            self,
+            data: dict,
+    ) -> None:
+
+        self.metadata_path.write_text(
+            json.dumps(
+                data,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     # ============================================================
     # Save
@@ -305,8 +509,21 @@ class SummaryManager:
         self._write_text(path, content)
 
     # ============================================================
-    # Path
+    # Utils
     # ============================================================
+    def _get_message_count(self) -> int:
+        """
+        获取当前Session消息数量。
+
+        建议直接从HistoryLogger metadata读取，
+        不要每次扫描文件。
+        """
+
+        return HistoryLoader.count_today(
+            self.bot_id,
+            self.is_private,
+            self.session_id,
+        )
 
     def _get_session_dir(self) -> Path:
         """
