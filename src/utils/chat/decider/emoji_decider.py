@@ -11,7 +11,6 @@ from src.utils.tools.file import load_from_txt
 from src.utils.chat.role_chat import ChatDSAPI
 
 
-# todo 暂时懒得支持在yaml里面修改
 class EmojiDecider(ChatDSAPI):
     """
     根据文本决定发送哪个表情。

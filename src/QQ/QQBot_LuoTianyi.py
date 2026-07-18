@@ -8,7 +8,8 @@ from typing import Dict
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
-    CheckinCommand, LyricCommand, DailyReportCommand, BanCommand, MorningCommand
+    CheckinCommand, LyricCommand, DailyReportCommand, BanCommand, MorningCommand, ImageGeneratorCommand, \
+    UpdateMemoryCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession, MessageContext
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
@@ -51,6 +52,8 @@ class BotManager:
         self.registry.register(DailyReportCommand())
         self.registry.register(BanCommand())
         self.registry.register(MorningCommand())
+        self.registry.register(ImageGeneratorCommand(CONFIG))
+        self.registry.register(UpdateMemoryCommand())
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -125,14 +128,14 @@ class BotManager:
 
         decision = await self._should_reply(ctx, history_msg)
         if not await self.__decision_to_bool(decision):
-            logger.info(f"决定不回复这条消息")
+            logger.info(f"决定不回复这条消息{recv_msg_wrapper.tool_msg[:10]}")
             return
 
         # =========================
         # 4. 回复
         # =========================
         ai_reply = await session.get_reply(ctx=ctx, text=recv_msg_wrapper.llm_msg)  # 生成回复
-        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.3)  # 表情包路径
+        emoji_path = session.emoji_decider.get_emoji_path(ai_reply, p=0.2)  # 表情包路径
 
         text_msg_id = await msg_sender.text(ai_reply)  # 先发送文本回复
         if emoji_path:
@@ -144,7 +147,8 @@ class BotManager:
         # =========================
         # 5. 存储回复消息
         # =========================
-        builder = SendMessageBuilder(recv_msg_wrapper, bot_id=str(CONFIG.bot_id), bot_name=CONFIG.name_zh)
+        builder = SendMessageBuilder(recv_msg_wrapper.session_id, recv_msg_wrapper.is_private,
+                                     bot_id=str(CONFIG.bot_id), bot_name=CONFIG.name_zh)
         send_wrappers = list()
         send_wrappers.append(builder.text(message_id=text_msg_id, text=ai_reply))
         if image_msg_id:

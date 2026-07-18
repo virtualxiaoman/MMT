@@ -3,12 +3,18 @@ import random
 import re
 from datetime import datetime
 from pathlib import Path
+from base64 import b64decode
+from typing import Literal
+
+from openai import OpenAI
 
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 # todo 帮助只实现了洛天依的部分，可以考虑单独写一个类来自定义
 from src.QQ.QQutils.msg.chat_session import MessageContext
 from src.config.QQ_bot_info_loader import BotConfig
-from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR, QQ_HISTORY_DIR, VOICE_DIR
+from src.config.path import PICTURES_DIR, HISTORY_DIR, PROMPT_DIR, QQ_HISTORY_DIR, VOICE_DIR, API_KEY_DIR
+from src.utils.chat.history.manage_summary import SummaryManager, SummaryGenerator
+from src.utils.chat.llm.run_prompt import PromptRunner
 from src.utils.chat.role_chat import DeepSeekClient
 from src.utils.tools.file import load_from_txt
 from src.utils.tools.res.specify_lyric import LyricRepository
@@ -388,6 +394,7 @@ class BanCommand(BaseCommand):
         return True
 
 
+# --- 指令8：早安 ---
 class MorningCommand(BaseCommand):
     def __init__(self):
         pass
@@ -409,3 +416,290 @@ class MorningCommand(BaseCommand):
             logger.warning(f"未找到匹配的早安文件: '{record_path}'")
 
         return True
+
+
+class ImageGenerator:
+    """
+    AI图片生成器
+
+    负责:
+        - 调用图片生成API
+        - 保存图片
+
+    不负责:
+        - 文件组织
+        - QQ消息处理
+    """
+
+    def __init__(
+            self,
+            api_key: str | None = None,
+            base_url: str = "https://yunwu.ai/v1",
+            model: str = "gpt-image-2",
+    ):
+        if api_key is None:
+            api_key = load_from_txt(
+                Path(API_KEY_DIR) / "yunwu.txt"
+            )
+
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+        )
+
+        self.model = model
+
+    def generate(
+            self,
+            prompt: str,
+            save_path: str | Path,
+            size: str = "1024x1024",
+            quality: str = "high",
+    ) -> Path:
+        """
+        生成图片
+
+        Args:
+            prompt:
+                图片描述
+
+            save_path:
+                保存路径
+
+        """
+
+        response = self.client.images.generate(
+            model=self.model,
+            prompt=prompt,
+            size=size,
+            quality=quality,
+            n=1,
+        )
+
+        image_base64 = response.data[0].b64_json
+
+        image = b64decode(image_base64)
+
+        save_path = Path(save_path)
+
+        save_path.parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        save_path.write_bytes(image)
+
+        return save_path
+
+
+QualityType = Literal[
+    "standard",
+    "hd",
+    "low",
+    "medium",
+    "high",
+    "auto",
+]
+
+
+# --- 指令9：生成图片 ---
+class ImageGeneratorCommand(BaseCommand):
+
+    def __init__(self, config: BotConfig):
+        self.bot_root = Path(QQ_HISTORY_DIR) / str(config.bot_id)
+        self.generator = ImageGenerator()
+
+    def match(self, text: str) -> bool:
+        return text.startswith("#绘图")
+
+    @staticmethod
+    def _parse_args(text: str) -> tuple[str, QualityType]:
+        """
+        解析绘图参数。
+
+        示例：
+
+            天依睡觉
+                -> ("天依睡觉", "auto")
+
+            天依睡觉 -quality=high
+                -> ("天依睡觉", "high")
+        """
+
+        quality: QualityType = "auto"
+
+        match = re.search(r"-quality=(\w+)", text)
+
+        if match:
+            value = match.group(1).lower()
+
+            if value in (
+                    "standard",
+                    "hd",
+                    "low",
+                    "medium",
+                    "high",
+                    "auto",
+            ):
+                quality = value
+
+        # 去掉参数
+        prompt = re.sub(
+            r"\s*-quality=\w+",
+            "",
+            text,
+        ).strip()
+
+        return prompt, quality
+
+    def _get_save_path(
+            self,
+            ctx: MessageContext,
+            suffix: str = "png",
+    ) -> Path:
+        """
+        生成图片保存路径
+
+        bot_root/
+            private or group/
+                session_id/
+                    AI_draw/
+                        month/
+                            day_i.png
+        """
+
+        now = datetime.now()
+
+        month = now.strftime("%Y-%m")
+        day = now.strftime("%Y-%m-%d")
+
+        session_type = (
+            "private"
+            if ctx.recv_msg_wrapper.is_private
+            else "group"
+        )
+
+        save_dir = (
+                self.bot_root
+                / session_type
+                / str(ctx.session_id)
+                / "AI_draw"
+                / month
+        )
+
+        save_dir.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        i = 1
+
+        while True:
+
+            path = save_dir / f"{day}_{i}.{suffix}"
+
+            if not path.exists():
+                return path
+
+            i += 1
+
+    async def handle(
+            self,
+            ctx: MessageContext,
+    ) -> bool:
+
+        text = ctx.recv_msg_wrapper.tool_msg
+
+        # 去掉 "#绘图"
+        text = text.replace(
+            "#绘图",
+            "",
+            1,
+        ).strip()
+
+        prompt, quality = self._parse_args(text)
+
+        if not prompt:
+            await ctx.msg_sender.text(
+                "提示词错误，请联系小满"
+            )
+
+            return True
+
+        logger.info(
+            f"AI绘图请求: prompt={prompt}, quality={quality}"
+        )
+
+        await ctx.msg_sender.text(
+            f"正在绘制图片：{prompt}，大约需要30秒噢~"
+        )
+
+        try:
+
+            save_path = self._get_save_path(ctx)
+
+            image_path = self.generator.generate(
+                prompt=prompt,
+                save_path=save_path,
+                quality=quality,
+            )
+
+            logger.info(
+                f"AI图片生成完成: {image_path}"
+            )
+
+            await ctx.msg_sender.image(
+                str(image_path)
+            )
+
+        except Exception as e:
+
+            logger.exception(
+                "AI绘图失败"
+            )
+
+            await ctx.msg_sender.text(
+                f"绘图失败了呜... {e}"
+            )
+
+        return True
+
+
+# --- 指令10：更新记忆 ---
+class UpdateMemoryCommand(BaseCommand):
+    """
+    更新记忆
+    """
+
+    def match(self, text: str) -> bool:
+        text = text.strip()
+        return text in ["#更新记忆", "# 更新记忆"]
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
+            await ctx.msg_sender.text(
+                "记忆对天依来说是很珍贵的东西，不能随便让人碰的。只有我特别的伙伴小满才可以命令天依哒~")
+            return True
+        else:
+            await ctx.msg_sender.text("天依正在了解大家的爱好，请耐心等待w")
+        runner = PromptRunner()
+        generator = SummaryGenerator(runner)
+        manager = SummaryManager(
+            bot_id=ctx.config.bot_id,
+            is_private=ctx.is_private,
+            session_id=ctx.session_id,
+            generator=generator,
+        )
+        manager.update_long_term()
+        manager.update_short_term()
+
+        return True
+
+
+if __name__ == "__main__":
+    img_generator = ImageGenerator()
+    path = img_generator.generate(
+        prompt="画一张洛天依",
+        save_path="../assets/pictures/AI_draw/test.png"
+    )
+    print(f"图片保存成功: {path}")

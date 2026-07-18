@@ -172,14 +172,16 @@ class RecvMessageWrapper:
             elif seg_type == "qq_face":
                 result.append(seg["content"])
             elif seg_type == "qq_emoji":
-                result.append(seg["content"])
+                result.append(f'发送了一个名为"{seg["summary"]}"的表情包，')
+                result.append(f'【表情包内容】：{seg["content"]}')
             elif seg_type == "at":
                 result.append(f'@{seg["qq_id"]}')
             elif seg_type == "image":
                 if seg["content"]:
+                    result.append(f'发送了一个图片，')
                     result.append(f'【图片内容】：{seg["content"]}')
                 else:
-                    result.append("[图片]")
+                    result.append(f'发送了一个图片，但是内容没有被上层正确识别，所以当做本图片不存在')
 
         content = " ".join(result)
         time_str = time.strftime(
@@ -358,11 +360,13 @@ class SendMessageBuilder:
 
     def __init__(
             self,
-            recv_msg_wrapper,
+            session_id: str,
+            is_private: bool,
             bot_id: str,
             bot_name: str = "Bot",
     ):
-        self.recv = recv_msg_wrapper
+        self.session_id = session_id
+        self.is_private = is_private
 
         self.bot_id = str(bot_id)
         self.bot_name = bot_name
@@ -379,8 +383,8 @@ class SendMessageBuilder:
     ) -> SendMessageWrapper:
         return SendMessageWrapper(
             message_id=message_id,
-            session_id=self.recv.session_id,
-            is_private=self.recv.is_private,
+            session_id=self.session_id,
+            is_private=self.is_private,
             user_id=self.bot_id,
             user_nickname=self.bot_name,
             reply_message_id=reply_message_id,
@@ -409,8 +413,8 @@ class SendMessageBuilder:
     ) -> SendMessageWrapper:
         return SendMessageWrapper(
             message_id=message_id,
-            session_id=self.recv.session_id,
-            is_private=self.recv.is_private,
+            session_id=self.session_id,
+            is_private=self.is_private,
             user_id=self.bot_id,
             user_nickname=self.bot_name,
             reply_message_id=reply_message_id,
@@ -442,8 +446,8 @@ class SendMessageBuilder:
     ) -> SendMessageWrapper:
         return SendMessageWrapper(
             message_id=message_id,
-            session_id=self.recv.session_id,
-            is_private=self.recv.is_private,
+            session_id=self.session_id,
+            is_private=self.is_private,
             user_id=self.bot_id,
             user_nickname=self.bot_name,
             reply_message_id=reply_message_id,
@@ -471,8 +475,8 @@ class SendMessageBuilder:
     ) -> SendMessageWrapper:
         return SendMessageWrapper(
             message_id=message_id,
-            session_id=self.recv.session_id,
-            is_private=self.recv.is_private,
+            session_id=self.session_id,
+            is_private=self.is_private,
             user_id=self.bot_id,
             user_nickname=self.bot_name,
             reply_message_id=reply_message_id,
@@ -498,8 +502,8 @@ class SendMessageBuilder:
     ) -> SendMessageWrapper:
         return SendMessageWrapper(
             message_id=message_id,
-            session_id=self.recv.session_id,
-            is_private=self.recv.is_private,
+            session_id=self.session_id,
+            is_private=self.is_private,
             user_id=self.bot_id,
             user_nickname=self.bot_name,
             reply_message_id=reply_message_id,
