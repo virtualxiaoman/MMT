@@ -22,6 +22,7 @@ from src.utils.chat.decider.reply_decider import ReplyDecider, ReplyDecisionData
 from src.utils.chat.history.manage_summary import SummaryGenerator, SummaryManager
 from src.utils.chat.llm.run_prompt import PromptRunner
 from src.utils.chat.prompt.load_prompt import RoleLoader
+from src.utils.chat.rate_limit import RateLimiter
 from src.utils.chat.reply_scheduler import ReplyScheduler, ReplyTrigger
 from src.utils.chat.role_chat import ChatDSAPI
 from src.utils.tools.res.emoji_detector import EmojiDetector
@@ -58,6 +59,7 @@ class ChatSession:
             emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",  # todo
         )
         self.reply_scheduler = ReplyScheduler(self._handle_reply)
+        self.rate_limiter = RateLimiter(max_calls=3, window_seconds=60)  # 滑动窗口
         logger.info(f"已为{'私聊' if is_private else '群聊'} {session_id} 初始化 AI 会话")
 
     # async def get_reply(self, text: str) -> str:
@@ -114,6 +116,10 @@ class ChatSession:
         if not await self._decision_to_bool(decision):
             logger.info(f"决定不回复这条消息{ctx.recv_msg_wrapper.tool_msg[:10]}")
             return
+
+        # if not ctx.session.rate_limiter.allow():
+        #     logger.info(f"{ctx.session.session_id} 回复过于频繁，跳过")
+        #     return
 
         # =========================
         # 5. 回复

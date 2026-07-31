@@ -31,6 +31,7 @@ class RecvMessageWrapper:
         session_id = (str(msg.user_id) if is_private else str(msg.group_id))  # [会话id] 私聊使用对话者id，群聊使用群聊id
         sender = getattr(msg, "sender", None)
         nickname = getattr(sender, "nickname", "")  # 目前没遇到没有nickname的情况
+
         reply_message_id = None
 
         segments = []

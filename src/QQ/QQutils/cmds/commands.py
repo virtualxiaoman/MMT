@@ -90,10 +90,7 @@ class MusicCommand(BaseCommand):
 
     async def handle(self, ctx: MessageContext) -> bool:
         song_name = ctx.tool_text[1:].strip()
-        music_finder = MusicRepository(
-            song_name=song_name,
-            music_dirs=self.music_dir
-        )
+        music_finder = MusicRepository(song_name=song_name, music_dirs=self.music_dir)
         record_path = music_finder.find_music_by_name()
         # record_path = await self._find_music_file(song_name)
         logger.info(f"歌曲名: '{song_name}'，音乐文件路径是: {record_path}")
@@ -328,8 +325,8 @@ class BanCommand(BaseCommand):
 
     async def handle(self, ctx: MessageContext) -> bool:
         if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
-            await ctx.msg_sender.text(
-                "天依是为大家带来幸福的歌者，不是用来禁言别人的工具哦。只有我特别的伙伴小满才可以命令天依哒~")
+            await ctx.msg_sender.text("天依是为大家带来幸福的歌者，不是用来禁言别人的工具哦。"
+                                      "只有我特别的伙伴小满才可以命令天依哒~")
             return True
         text = ctx.tool_text
 
@@ -677,8 +674,8 @@ class UpdateMemoryCommand(BaseCommand):
 
     async def handle(self, ctx: MessageContext) -> bool:
         if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
-            await ctx.msg_sender.text(
-                "记忆对天依来说是很珍贵的东西，不能随便让人碰的。只有我特别的伙伴小满才可以命令天依哒~")
+            await ctx.msg_sender.text("记忆对天依来说是很珍贵的东西，不能随便让人碰的。"
+                                      "只有我特别的伙伴小满才可以命令天依哒~")
             return True
         else:
             await ctx.msg_sender.text("天依正在了解大家的爱好，请耐心等待w")

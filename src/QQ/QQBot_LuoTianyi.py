@@ -5,6 +5,13 @@ import time
 from pathlib import Path
 from typing import Dict
 
+# ncatbot 内部大量使用相对路径(Path.cwd())读取配置，
+# 因此必须先切换工作目录，再导入 ncatbot。
+QQ_ROOT = Path(__file__).resolve().parent
+os.chdir(QQ_ROOT)
+# print(f"cwd = {os.getcwd()}")
+# print(f"__file__ = {Path(__file__).resolve()}")
+
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
@@ -104,7 +111,9 @@ class BotManager:
             recv_msg_wrapper=recv_msg_wrapper,
             config=CONFIG
         )
-
+        if not ctx.session.rate_limiter.allow():
+            logger.info(f"{ctx.session.session_id} 回复过于频繁，跳过")
+            return
         # =========================
         # 3. 工具类指令
         # =========================
