@@ -5,8 +5,6 @@ import time
 class RateLimiter:
     """
     滑动窗口限流器
-
-    每个实例限制一个 session
     """
 
     def __init__(self, max_calls: int = 3, window_seconds: int = 60):
@@ -14,31 +12,35 @@ class RateLimiter:
         self.window_seconds = window_seconds
         self.calls = deque()
 
-    def allow(self) -> bool:
-        """
-        当前是否允许发送
-        """
-
+    def _cleanup(self) -> None:
+        """删除过期记录"""
         now = time.monotonic()
-
-        # 删除过期记录
-        while self.calls and now - self.calls[0] > self.window_seconds:
+        while self.calls and now - self.calls[0] >= self.window_seconds:
             self.calls.popleft()
 
-        if len(self.calls) >= self.max_calls:
-            return False
+    def allow(self) -> bool:
+        """
+        是否允许发送，不会记录发送。
+        """
+        self._cleanup()
+        return len(self.calls) < self.max_calls
 
-        self.calls.append(now)
-        return True
+    def record(self) -> None:
+        """
+        记录一次成功发送。
+        """
+        self._cleanup()
+        self.calls.append(time.monotonic())
 
     def remaining(self) -> int:
         """
-        剩余次数
+        剩余发送次数。
         """
-
-        now = time.monotonic()
-
-        while self.calls and now - self.calls[0] > self.window_seconds:
-            self.calls.popleft()
-
+        self._cleanup()
         return self.max_calls - len(self.calls)
+
+    def clear(self) -> None:
+        """
+        清空记录。
+        """
+        self.calls.clear()

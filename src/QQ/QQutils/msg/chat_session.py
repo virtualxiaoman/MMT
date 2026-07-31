@@ -133,7 +133,7 @@ class ChatSession:
         else:
             image_msg_id = None
         # todo 语音回复
-
+        ctx.session.rate_limiter.record()  # 记录
         # =========================
         # 6. 存储回复消息
         # =========================
@@ -144,7 +144,6 @@ class ChatSession:
         if image_msg_id:
             send_wrappers.append(builder.image(message_id=image_msg_id, file=emoji_path,
                                                content=Path(emoji_path).stem))
-
         history_logger = HistoryLogger(config=ctx.config)
         for send_wrapper in send_wrappers:
             history_logger.append_send(send_wrapper)  # 保存消息（LLMinput+人类可读）
