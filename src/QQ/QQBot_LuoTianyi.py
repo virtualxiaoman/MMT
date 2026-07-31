@@ -119,6 +119,7 @@ class BotManager:
         # =========================
         handled = await self.registry.dispatch(ctx)
         if handled:
+            ctx.session.rate_limiter.record()  # 记录
             return
 
         # =========================
