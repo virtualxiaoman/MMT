@@ -89,17 +89,40 @@ class MusicCommand(BaseCommand):
         return text.startswith("唱") and len(text) > 1
 
     async def handle(self, ctx: MessageContext) -> bool:
-        song_name = ctx.tool_text[1:].strip()
-        music_finder = MusicRepository(song_name=song_name, music_dirs=self.music_dir)
-        record_path = music_finder.find_music_by_name()
-        # record_path = await self._find_music_file(song_name)
-        logger.info(f"歌曲名: '{song_name}'，音乐文件路径是: {record_path}")
-        if record_path:
-            await ctx.msg_sender.record(record_path)
-        else:
-            await ctx.msg_sender.text(f"抱歉，天依还不会唱{song_name}这首歌呢~你可以教教天依吗(>_<)")
-            logger.warning(f"未找到匹配的音乐文件，无法满足用户的唱歌请求: '{song_name}'")
+        query = ctx.tool_text[1:].strip()
+        send_record = True  # 默认发送语音
+        send_file = False  # 默认不发送文件
 
+        if query.endswith("-a"):
+            send_record = True
+            send_file = True
+            query = query[:-2].strip()
+        elif query.endswith("-f"):
+            send_record = False
+            send_file = True
+            query = query[:-2].strip()
+
+        if not query:
+            await ctx.msg_sender.text("你想让天依唱什么呢？")
+            return True
+
+        music_finder = MusicRepository(song_name=query, music_dirs=self.music_dir)
+        record_path = music_finder.find_music_by_name()
+        if record_path:
+            record_path = Path(record_path)
+            if not record_path.is_file():
+                logger.error(f"音乐文件不存在: {record_path}")
+                record_path = None
+        logger.info(f"歌曲名: '{query}'，音乐文件路径: {record_path}，发送语音={send_record}，发送文件={send_file}")
+
+        if record_path:
+            if send_record:
+                await ctx.msg_sender.record(str(record_path))
+            if send_file:
+                await ctx.msg_sender.file(str(record_path), name=record_path.name)
+        else:
+            await ctx.msg_sender.text(f"抱歉，天依还不会唱《{query}》这首歌呢~你可以教教天依吗(>_<)")
+            logger.warning(f"未找到匹配的音乐文件，无法满足用户的唱歌请求: '{query}'")
         return True
 
     # async def _find_music_file(self, song_name: str) -> str | None:

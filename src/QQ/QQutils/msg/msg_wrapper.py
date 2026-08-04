@@ -5,7 +5,9 @@ from typing import Any
 
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
+from src.config.QQ_bot_info_loader import BotConfig
 from src.utils.chat.img_describer import ImageDescriber
+from src.utils.tools.res.emoji_detector import EmojiDetector
 
 
 # 应该继承同一个类以便一起管理
@@ -14,11 +16,15 @@ class RecvMessageWrapper:
     将原始消息标准化
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: PrivateMessage | GroupMessage, config: BotConfig):
         self.raw_msg = msg
+        self.bot_config = config
         self.data = self._parse_message(msg)
 
         self.image_describer = ImageDescriber()
+        self.emoji_detector = EmojiDetector(
+            emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",  # todo 修改路径
+        )
 
         self.processed = False  # 标识有没有对多模态数据进行处理
 
@@ -114,12 +120,23 @@ class RecvMessageWrapper:
         使用VLM补全图片content
         """
         for seg in self.data["segments"]:
-            if seg["type"] == "image" or seg["type"] == "qq_emoji":
-                try:
-                    seg["content"] = self.image_describer.describe_img(seg["url"])
-                except Exception as e:
-                    print(f"[MessageWrapper] 图片识别失败: {e}")
-                    seg["content"] = None
+            if seg["type"] not in ("image", "qq_emoji"):
+                continue  # 直接排除 非图片 的情况
+            image_content: str = ""
+            # image
+            if seg["type"] == "image":
+                image_url = self.image_urls
+                if len(image_url) == 1 and self.emoji_detector.is_emoji(image_url[0]):
+                    image_content += f"这是一个{self.bot_config.name_zh}的表情包。"
+            # image or qq_emoji
+            try:
+                img_desc = self.image_describer.describe_img(seg["url"])
+                if img_desc:
+                    image_content += img_desc
+                # seg["content"] = self.image_describer.describe_img(seg["url"])
+            except Exception as e:
+                print(f"[MessageWrapper] 图片识别失败: {e}")
+            seg["content"] = image_content or None
 
     @property
     def json(self) -> dict:
@@ -167,24 +184,28 @@ class RecvMessageWrapper:
         for seg in self.segments:
             seg_type = seg["type"]
             if seg_type == "text":
-                result.append(seg["content"])
+                result.append(seg.get("content") or "")
             elif seg_type == "emoji":
-                result.append(seg["content"])
+                result.append(seg.get("content") or "")
             elif seg_type == "qq_face":
-                result.append(seg["content"])
+                result.append(seg.get("content") or "")
             elif seg_type == "qq_emoji":
-                result.append(f'发送了一个名为"{seg["summary"]}"的表情包，')
-                result.append(f'【表情包内容】：{seg["content"]}')
+                result.append(f'发送了一个名为"{seg.get("summary") or ''}"的表情包，')
+                result.append(f'【表情包内容】：{seg.get("content") or ""}')
             elif seg_type == "at":
-                result.append(f'@{seg["qq_id"]}')
+                result.append(f'@{seg.get("qq_id") or ""}')
             elif seg_type == "image":
                 if seg["content"]:
-                    result.append(f'发送了一个图片，')
-                    result.append(f'【图片内容】：{seg["content"]}')
+                    result.append(f'发送了一张图片，')
+                    result.append(f'【图片内容】：{seg.get("content") or ""}')
                 else:
                     result.append(f'发送了一个图片，但是内容没有被上层正确识别，所以当做本图片不存在')
+                    print(f"[MessageWrapper] 图片内容未识别，可能是OCR/VLM识别失败: {seg.get('url') or ""}")
 
-        content = " ".join(result)
+        content = " ".join(
+            str(x) for x in result
+            if x is not None
+        )
         time_str = time.strftime(
             "%Y-%m-%d %H:%M:%S",
             time.localtime(self.timestamp)

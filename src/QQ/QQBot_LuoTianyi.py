@@ -90,7 +90,7 @@ class BotManager:
         # =========================
         # 2. 格式化消息，处理多模态数据，建立ctx
         # =========================
-        recv_msg_wrapper = RecvMessageWrapper(msg)
+        recv_msg_wrapper = RecvMessageWrapper(msg, CONFIG)
         recv_msg_wrapper.process_content()
         print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.llm_msg}\n"
               f"工具类输入消息：{recv_msg_wrapper.tool_msg}")

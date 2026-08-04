@@ -56,7 +56,7 @@ class ChatSession:
         self.random_picture_provider = RandomPicture(config.paths.random_picture_dirs)
         self.qq_reply_settings = QQReplySettings(config.bot_id)
         self.emoji_detector = EmojiDetector(
-            emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",  # todo
+            emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",  # todo 修改路径
         )
         self.reply_scheduler = ReplyScheduler(self._handle_reply)
         self.rate_limiter = RateLimiter(max_calls=3, window_seconds=60)  # 滑动窗口
@@ -95,11 +95,7 @@ class ChatSession:
             logger.exception("AI 生成回复失败")
             return "呜... 脑子转不过来了..."
 
-    async def _handle_reply(
-            self,
-            ctx: MessageContext,
-            trigger: ReplyTrigger,
-    ) -> None:
+    async def _handle_reply(self, ctx: MessageContext, trigger: ReplyTrigger) -> None:
         """
         ReplyScheduler 回调。
 
