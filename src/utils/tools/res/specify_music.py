@@ -82,15 +82,18 @@ class MusicRepository:
         "无损": 3,
     }
 
-    def __init__(self, song_name: str, music_dirs: str | list):
-        self.song_name = song_name
+    def __init__(self, song_names: str | list[str], music_dirs: str | list):
+        if isinstance(song_names, str):
+            self.song_names = [song_names.lower()]
+        else:
+            self.song_names = [s.lower() for s in song_names]
+
         if isinstance(music_dirs, str):
             self.music_dirs = [Path(music_dirs)]
         else:
             self.music_dirs = [Path(path) for path in music_dirs]
 
     def find_music_by_name(self) -> str | None:
-        target = self.song_name.lower()
         candidates: list[tuple[int, Path]] = []
 
         for music_dir in self.music_dirs:
@@ -101,15 +104,13 @@ class MusicRepository:
             for file in music_dir.rglob("*"):
                 if not file.is_file():
                     continue
-
                 if file.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
                     continue
-
                 name = file.stem.lower()
-                if target not in name:
+                # 所有关键词至少命中一个
+                if not any(keyword in name for keyword in self.song_names):
                     continue
-
-                score = self._score(file, target)
+                score = self._score(file)
                 candidates.append((score, file))
                 print(f"找到歌曲{file}, score={score}")
 
@@ -118,24 +119,29 @@ class MusicRepository:
 
         candidates.sort(key=lambda x: x[0], reverse=True)
         best_score, best_file = candidates[0]
-
         logger.info(f"最佳匹配: '{best_file.name}' (score={best_score})")
-
         return str(best_file.resolve())
 
-    def _score(self, file: Path, target: str) -> int:
+    def _score(self, file: Path) -> int:
         name = file.stem.lower()
         score = 0
-
-        # ---------- 名称匹配 ----------
-        if name == target:
-            score += 100
-        elif name.startswith(target) or name.endswith(target):
-            score += 95
-        elif any(part == target for part in self._split_words(name)):
-            score += 90
-        else:
-            score += 60
+        # ---------- 名称关键词 ----------
+        hit_count = 0
+        for keyword in self.song_names:
+            if name == keyword:
+                score += 120
+                hit_count += 1
+            elif keyword in name:
+                score += 90
+                hit_count += 1
+            elif any(part == keyword for part in self._split_words(name)):
+                score += 100
+                hit_count += 1
+        # 多关键词奖励
+        score += (hit_count - 1) * 100
+        # 一个关键词都没命中直接淘汰
+        if hit_count == 0:
+            return -100000
 
         # ---------- 版本关键词 ----------
         for keyword, delta in self.NEGATIVE_KEYWORDS.items():
@@ -149,8 +155,9 @@ class MusicRepository:
         score += self.FORMAT_SCORE.get(file.suffix.lower(), 0)
 
         # ---------- 长度 ----------
-        normalized = self._normalize_name(name)
-        score -= max(0, len(normalized) - len(target))
+        normalized = self._simplify_name_for_length(name)
+        target_len = sum(len(x) for x in self.song_names)
+        score -= max(0, len(normalized) - target_len)
         # score -= max(0, len(name) - len(target))
 
         # ---------- 时间 ----------
@@ -190,6 +197,7 @@ class MusicRepository:
             "（",
             "）",
             ".",
+            "·",
         )
 
         parts = [name]
@@ -211,7 +219,7 @@ class MusicRepository:
             return 0
 
     @staticmethod
-    def _normalize_name(name: str) -> str:
+    def _simplify_name_for_length(name: str) -> str:
         """
         规范化文件名，用于长度惩罚计算。
 
@@ -246,8 +254,8 @@ class MusicRepository:
         # 去掉所有空白字符
         name = re.sub(r"\s+", "", name)
 
-        # 去掉所有数字
-        name = re.sub(r"\d+", "", name)
+        # # 去掉所有数字
+        # name = re.sub(r"\d+", "", name)
 
         return name.strip()
     # def find_music_by_name(self) -> str | None:

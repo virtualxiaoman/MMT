@@ -106,14 +106,18 @@ class MusicCommand(BaseCommand):
             await ctx.msg_sender.text("你想让天依唱什么呢？")
             return True
 
-        music_finder = MusicRepository(song_name=query, music_dirs=self.music_dir)
+        keywords = re.split(r"[,+\s]+", query)
+        keywords = [k.strip() for k in keywords if k.strip()]
+        keywords = list(dict.fromkeys(keywords))
+
+        music_finder = MusicRepository(song_names=keywords, music_dirs=self.music_dir)
         record_path = music_finder.find_music_by_name()
         if record_path:
             record_path = Path(record_path)
             if not record_path.is_file():
                 logger.error(f"音乐文件不存在: {record_path}")
                 record_path = None
-        logger.info(f"歌曲名: '{query}'，音乐文件路径: {record_path}，发送语音={send_record}，发送文件={send_file}")
+        logger.info(f"歌曲关键词: {keywords}，音乐文件路径: {record_path}，发送语音={send_record}，发送文件={send_file}")
 
         if record_path:
             if send_record:
@@ -121,8 +125,8 @@ class MusicCommand(BaseCommand):
             if send_file:
                 await ctx.msg_sender.file(str(record_path), name=record_path.name)
         else:
-            await ctx.msg_sender.text(f"抱歉，天依还不会唱《{query}》这首歌呢~你可以教教天依吗(>_<)")
-            logger.warning(f"未找到匹配的音乐文件，无法满足用户的唱歌请求: '{query}'")
+            await ctx.msg_sender.text(f"抱歉，天依还不会唱《{' '.join(keywords)}》这首歌呢~你可以教教天依吗(>_<)")
+            logger.warning(f"未找到匹配歌曲: {keywords}")
         return True
 
     # async def _find_music_file(self, song_name: str) -> str | None:

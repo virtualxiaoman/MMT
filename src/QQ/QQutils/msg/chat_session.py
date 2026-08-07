@@ -93,7 +93,7 @@ class ChatSession:
 
         except Exception:
             logger.exception("AI 生成回复失败")
-            return "呜... 脑子转不过来了..."
+            return f"呜... {ctx.config.name_zh}有点晕晕的..."
 
     async def _handle_reply(self, ctx: MessageContext, trigger: ReplyTrigger) -> None:
         """

@@ -81,11 +81,11 @@ class ChatPipeline:
         完整聊天流程
         """
         # 1. 获取记忆
-        memory_context = (self._get_memory())
+        memory_context = self._get_memory()
         # 2. 知识检索
-        knowledge_context = (self._retrieve_knowledge(user_query))
+        knowledge_context = self._retrieve_knowledge(user_query)
         # 3. 构造system prompt
-        system_prompt = (self._build_system_prompt(memory_context, knowledge_context))
+        system_prompt = self._build_system_prompt(memory_context, knowledge_context)
         # print(system_prompt)
         # 4. 创建Conversation
         conv = ConversationManager(system_prompt=system_prompt, enable_memory=False)
@@ -139,7 +139,7 @@ class ChatPipeline:
             bot_id=self.bot_id,
             is_private=self.is_private,
             session_id=self.session_id,
-            max_lines=50,
+            max_lines=30,
         )
 
     def _append_history(self, conv: ConversationManager) -> None:
