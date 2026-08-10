@@ -12,40 +12,51 @@ class MessageSender:
         self.session_id = session_id
         self.is_private = is_private
 
+    # 获取本次发送使用的目标会话
+    def _resolve_target(self, session_id: str | None = None, is_private: bool | None = None) -> tuple[str, bool]:
+        return (session_id if session_id is not None else self.session_id,
+                is_private if is_private is not None else self.is_private)
+
     # 文本
-    async def text(self, content: str) -> str:
-        if self.is_private:
-            message_id = await self.bot.api.post_private_msg(user_id=self.session_id, text=content)
+    async def text(self, content: str, session_id: str | None = None, is_private: bool | None = None) -> str:
+        session_id, is_private = self._resolve_target(session_id, is_private)
+        if is_private:
+            message_id = await self.bot.api.post_private_msg(user_id=session_id, text=content)
         else:
-            message_id = await self.bot.api.post_group_msg(group_id=self.session_id, text=content)
-        logger.info(f"已回复{'用户' if self.is_private else '群'} {self.session_id} 的文本消息: {content}")
+            message_id = await self.bot.api.post_group_msg(group_id=session_id, text=content)
+        logger.info(f"已回复{'用户' if self.is_private else '群'} {session_id} 的文本消息: {content}")
         return message_id
 
     # 图片
-    async def image(self, path: str) -> str:
-        if self.is_private:
-            message_id = await self.bot.api.post_private_msg(user_id=self.session_id, image=path)
+    async def image(self, path: str, session_id: str | None = None, is_private: bool | None = None) -> str:
+        session_id, is_private = self._resolve_target(session_id, is_private)
+        if is_private:
+            message_id = await self.bot.api.post_private_msg(user_id=session_id, image=path)
         else:
-            message_id = await self.bot.api.post_group_msg(group_id=self.session_id, image=path)
-        logger.info(f"已回复{'用户' if self.is_private else '群'} {self.session_id}，图片路径为: {path}")
+            message_id = await self.bot.api.post_group_msg(group_id=session_id, image=path)
+        logger.info(f"已回复{'用户' if self.is_private else '群'} {session_id}，图片路径为: {path}")
         return message_id
 
     # 语音
-    async def record(self, path: str) -> str:
-        if self.is_private:
-            message_id = await self.bot.api.send_private_record(user_id=self.session_id, file=path)
+    async def record(self, path: str, session_id: str | None = None, is_private: bool | None = None) -> str:
+        session_id, is_private = self._resolve_target(session_id, is_private)
+        if is_private:
+            message_id = await self.bot.api.send_private_record(user_id=session_id, file=path)
         else:
-            message_id = await self.bot.api.send_group_record(group_id=self.session_id, file=path)
-        logger.info(f"已回复{'用户' if self.is_private else '群'} {self.session_id}，语音路径为: {path}")
+            print(path)
+            message_id = await self.bot.api.send_group_record(group_id=session_id, file=path)
+        logger.info(f"已回复{'用户' if self.is_private else '群'} {session_id}，语音路径为: {path}")
         return message_id
 
     # 文件
-    async def file(self, path: str, name: str | None = None) -> str:
-        if self.is_private:
-            message_id = await self.bot.api.send_private_file(user_id=self.session_id, file=path, name=name)
+    async def file(self, path: str, name: str | None = None,
+                   session_id: str | None = None, is_private: bool | None = None) -> str:
+        session_id, is_private = self._resolve_target(session_id, is_private)
+        if is_private:
+            message_id = await self.bot.api.send_private_file(user_id=session_id, file=path, name=name)
         else:
-            message_id = await self.bot.api.send_group_file(group_id=self.session_id, file=path, name=name)
-        logger.info(f"已回复{'用户' if self.is_private else '群'} {self.session_id}，"
+            message_id = await self.bot.api.send_group_file(group_id=session_id, file=path, name=name)
+        logger.info(f"已回复{'用户' if self.is_private else '群'} {session_id}，"
                     f"文件路径为: {path}，文件名: {name}" if name else "")
         return message_id
 

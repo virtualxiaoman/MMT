@@ -720,6 +720,169 @@ class UpdateMemoryCommand(BaseCommand):
         return True
 
 
+# --- 指令11：管理员群发功能 ---
+class GroupSendCommand(BaseCommand):
+    """
+    管理员私聊时向指定群发送消息。
+
+    格式：
+        #群发 <群号> <文本>
+        #群发 <群号> -image <图片路径>
+        #群发 <群号> -record <语音路径>
+        #群发 <群号> -file <文件路径>
+        #群发 <群号> -file <文件路径> <文件名>
+
+    示例：
+        #群发 123456789 大家晚上好
+        #群发 123456789 -image D:\\test\\a.png
+        #群发 123456789 -record D:\\test\\a.mp3
+        #群发 123456789 -file D:\\test\\a.zip
+        #群发 123456789 -file D:\\test\\a.zip test.zip
+    """
+
+    def match(self, text: str) -> bool:
+        return text.strip().startswith("#群发")
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
+            await ctx.msg_sender.text("这个命令只有特别的伙伴才可以使用哦~")
+            return True
+
+        if not ctx.is_private:
+            await ctx.msg_sender.text("这个命令只能在私聊中使用哟~")
+            return True
+
+        try:
+            group_id, message_type, args = self._parse(ctx.tool_text)
+        except ValueError as e:
+            await ctx.msg_sender.text(str(e))
+            return True
+
+        logger.info(f"管理员群发请求: group_id={group_id}, type={message_type}, args={args}")
+
+        try:
+            if message_type == "text":
+                await self._send_text(ctx, group_id, args[0])
+            elif message_type == "image":
+                await self._send_image(ctx, group_id, args[0])
+            elif message_type == "record":
+                await self._send_record(ctx, group_id, args[0])
+            elif message_type == "file":
+                await self._send_file(ctx, group_id, args[0], args[1] if len(args) > 1 else None)
+        except Exception as e:
+            logger.exception(f"管理员群发失败: group_id={group_id}, type={message_type}")
+            await ctx.msg_sender.text(f"群发失败了。\n目标群：{group_id}\n原因：{e}")
+            return True
+
+        await ctx.msg_sender.text(f"已发送到群{group_id}啦~")
+        return True
+
+    @staticmethod
+    def _parse(text: str) -> tuple[str, str, list[str]]:
+        text = text.strip()
+
+        if not text.startswith("#群发"):
+            raise ValueError("格式错误。")
+
+        content = text[len("#群发"):].strip()
+
+        if not content:
+            raise ValueError(
+                "格式错误。\n"
+                "正确格式：\n"
+                "#群发 <群号> <消息内容>\n"
+                "#群发 <群号> -image <图片路径>\n"
+                "#群发 <群号> -record <语音路径>\n"
+                "#群发 <群号> -file <文件路径> [文件名]"
+            )
+
+        parts = content.split(maxsplit=2)
+
+        if len(parts) < 2:
+            raise ValueError("格式错误。\n例如：#群发 123456789 大家晚上好")
+
+        group_id = parts[0]
+
+        if not group_id.isdigit():
+            raise ValueError(f"群号格式错误：{group_id}")
+
+        # 默认发送文本
+        if parts[1] not in {"-image", "-record", "-file"}:
+            return group_id, "text", [content.split(maxsplit=1)[1]]
+
+        option = parts[1]
+
+        if len(parts) < 3:
+            if option == "-image":
+                raise ValueError("图片格式错误。\n正确格式：#群发 <群号> -image <图片路径>")
+            if option == "-record":
+                raise ValueError("语音格式错误。\n正确格式：#群发 <群号> -record <语音路径>")
+            raise ValueError("文件格式错误。\n正确格式：#群发 <群号> -file <文件路径> [文件名]")
+
+        argument = parts[2]
+
+        if option == "-image":
+            return group_id, "image", [argument]
+
+        if option == "-record":
+            return group_id, "record", [argument]
+
+        # -file 默认将剩余内容整体作为文件路径
+        return group_id, "file", [argument]
+
+    @staticmethod
+    def _split_args(text: str) -> list[str]:
+        return re.findall(r'"([^"]*)"|(\S+)', text) and [
+            quoted if quoted else unquoted
+            for quoted, unquoted in re.findall(r'"([^"]*)"|(\S+)', text)
+        ]
+
+    async def _send_text(self, ctx: MessageContext, group_id: str, content: str):
+        await ctx.msg_sender.text(content, session_id=group_id, is_private=False)
+
+    async def _send_image(self, ctx: MessageContext, group_id: str, path: str):
+        path = Path(path)
+
+        if not path.is_file():
+            await ctx.msg_sender.text(f"图片不存在：{path}")
+            raise ValueError(f"图片不存在：{path}")
+
+        await ctx.msg_sender.image(str(path), session_id=group_id, is_private=False)
+
+    async def _send_record(self, ctx: MessageContext, group_id: str, path: str):
+        path = Path(path)
+
+        if not path.is_file():
+            await ctx.msg_sender.text(f"语音不存在：{path}")
+            raise ValueError(f"语音文件不存在：{path}")
+
+        await ctx.msg_sender.record(str(path), session_id=group_id, is_private=False)
+
+    async def _send_file(self, ctx: MessageContext, group_id: str, path: str, name: str | None = None):
+        path = Path(path)
+
+        if not path.is_file():
+            await ctx.msg_sender.text(f"文件不存在：{path}")
+            raise ValueError(f"文件不存在：{path}")
+
+        await ctx.msg_sender.file(str(path), name=name, session_id=group_id, is_private=False)
+
+
+class SendLikeCommand(BaseCommand):
+    def match(self, text: str) -> bool:
+        return text == "赞我"
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        user_id = ctx.recv_msg_wrapper.user_id
+        result = await ctx.bot.api.send_like(
+            user_id=user_id,
+            times=10
+        )
+        print(result)  # {'status': 'ok', 'retcode': 0, 'message': '', 'wording': '', 'echo': '5fc41989-4fbb-4de0-b244-f421d7df7d56', 'stream': 'normal-action'}
+        await ctx.msg_sender.text("天依给你点了个10个赞哦~")
+        return True
+
+
 if __name__ == "__main__":
     img_generator = ImageGenerator()
     path = img_generator.generate(

@@ -16,7 +16,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
     CheckinCommand, LyricCommand, DailyReportCommand, BanCommand, MorningCommand, ImageGeneratorCommand, \
-    UpdateMemoryCommand
+    UpdateMemoryCommand, GroupSendCommand, SendLikeCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession, MessageContext
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
@@ -111,9 +111,11 @@ class BotManager:
             recv_msg_wrapper=recv_msg_wrapper,
             config=CONFIG
         )
-        if not ctx.session.rate_limiter.allow():
-            logger.info(f"{ctx.session.session_id} 回复过于频繁，跳过")
-            return
+        # 仅在群聊中进行频率限制，私聊不限制
+        if not ctx.is_private:
+            if not ctx.session.rate_limiter.allow():
+                logger.info(f"{ctx.session.session_id} 回复过于频繁，跳过")
+                return
         # =========================
         # 3. 工具类指令
         # =========================
@@ -138,6 +140,8 @@ class BotManager:
         self.registry.register(MorningCommand())
         self.registry.register(ImageGeneratorCommand(CONFIG))
         self.registry.register(UpdateMemoryCommand())
+        self.registry.register(GroupSendCommand())
+        self.registry.register(SendLikeCommand())
 
     async def _can_reply(self, session: ChatSession, is_private: bool) -> bool:
         """
