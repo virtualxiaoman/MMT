@@ -42,6 +42,18 @@ chat_ds.multi_chat()
 正在开发中，可参考`src/QQ/QQBot_Shiroko.py`，主要使用其中的`handle_message`。
 QQ框架使用的是基于napcat的ncatbot，如果遇到问题请参考它们的文档。
 你可能需要修改`assets/config/models.yaml`中的模型配置，默认都使用了DeepSeek API，其中`decide_model`支持本地模型`qwen3-vl:4b`等，其余暂不支持。
+### 4. BiliTools
+本项目使用了BiliTools：
+```bash
+# 将 BiliTools 添加到 MMT 中
+git submodule add https://github.com/virtualxiaoman/BiliTools.git libs/BiliTools
+# 更新 MMT 的仓库
+git add .gitmodules libs/BiliTools
+git commit -m "Add BiliTools as a submodule"
+git push
+# 更新子模块到远程仓库的最新版本
+git submodule update --remote libs/BiliTools
+```
 
 ## 二、目前已完成进度与未来计划
 

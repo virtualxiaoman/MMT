@@ -1,9 +1,13 @@
+# 必须先于任何 libs.BiliTools 导入加载兼容钩子（否则 BiliTools 的 src.* 会解析到 MMT 的 src）
+import src.utils.bilitools_compat  # noqa: F401
 import logging
 import os
 import random
 import time
 from pathlib import Path
 from typing import Dict
+
+from libs.BiliTools.src.services.login import LoginService
 
 # ncatbot 内部大量使用相对路径(Path.cwd())读取配置，
 # 因此必须先切换工作目录，再导入 ncatbot。
@@ -16,7 +20,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.QQ.QQutils.cmds.commands import CommandRegistry, ImageCommand, MusicCommand, HelpCommand, \
     CheckinCommand, LyricCommand, DailyReportCommand, BanCommand, MorningCommand, ImageGeneratorCommand, \
-    UpdateMemoryCommand, GroupSendCommand, SendLikeCommand
+    UpdateMemoryCommand, GroupSendCommand, SendLikeCommand, BiliDownloadCommand
 from src.QQ.QQutils.msg.chat_session import ChatSession, MessageContext
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper, SendMessageBuilder
 # from src.QQ.QQutils.msg.process_img import MessageNormalizer
@@ -52,6 +56,7 @@ class BotManager:
 
         self.registry = CommandRegistry()
         self._init_registry()
+        self._login_bilibili()
 
     def get_session(self, session_id: str, is_private: bool) -> ChatSession:
         prefix = "private_" if is_private else "group_"
@@ -142,6 +147,14 @@ class BotManager:
         self.registry.register(UpdateMemoryCommand())
         self.registry.register(GroupSendCommand())
         self.registry.register(SendLikeCommand())
+        self.registry.register(BiliDownloadCommand())
+
+    def _login_bilibili(self):
+        login_service = LoginService()
+        if not login_service.get_login_state().is_login:
+            service = LoginService()
+            success = service.qr_login()  # 阻塞轮询，默认 60s 超时
+            print(f"登录结果：{success}")
 
     async def _can_reply(self, session: ChatSession, is_private: bool) -> bool:
         """

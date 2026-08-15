@@ -1,3 +1,6 @@
+# 必须先于下方 libs.BiliTools 导入加载兼容钩子（否则 BiliTools 的 src.* 会解析到 MMT 的 src）
+import src.utils.bilitools_compat  # noqa: F401
+import asyncio
 import logging
 import random
 import re
@@ -8,6 +11,8 @@ from typing import Literal
 
 from openai import OpenAI
 
+from libs.BiliTools.src.services.login import LoginService
+from libs.BiliTools.src.services.video import VideoService
 from src.QQ.QQutils.msg.msg_wrapper import RecvMessageWrapper
 # todo 帮助只实现了洛天依的部分，可以考虑单独写一个类来自定义
 from src.QQ.QQutils.msg.chat_session import MessageContext
@@ -878,15 +883,66 @@ class SendLikeCommand(BaseCommand):
             user_id=user_id,
             times=10
         )
-        print(result)  # {'status': 'ok', 'retcode': 0, 'message': '', 'wording': '', 'echo': '5fc41989-4fbb-4de0-b244-f421d7df7d56', 'stream': 'normal-action'}
+        # {'status': 'ok', 'retcode': 0, 'message': '', 'wording': '', 'echo': '5fc41989-4fbb-4de0-b244-f421d7df7d56', 'stream': 'normal-action'}
+        print(result)
         await ctx.msg_sender.text("天依给你点了个10个赞哦~")
         return True
 
 
+class BiliDownloadCommand(BaseCommand):
+    BV_PATTERN = re.compile(r"^BV[0-9A-Za-z]+$")
+
+    def match(self, text: str) -> bool:
+        return text.strip().startswith("#下载")
+
+    async def handle(self, ctx: MessageContext) -> bool:
+        text = ctx.tool_text
+        bvid = text[len("#下载"):].strip()
+
+        if not self.BV_PATTERN.fullmatch(bvid):
+            await ctx.msg_sender.text("请输入正确的 BV 号，例如：#下载 BV1ov42117yC")
+            return True
+
+        try:
+            service = VideoService()
+            result = await asyncio.to_thread(service.download_video_with_audio, bvid)
+            await ctx.msg_sender.file(str(result.path))
+        except Exception as e:
+            await ctx.msg_sender.text(f"下载失败：{e}")
+
+        return True
+
+
 if __name__ == "__main__":
-    img_generator = ImageGenerator()
-    path = img_generator.generate(
-        prompt="画一张洛天依",
-        save_path="../assets/pictures/AI_draw/test.png"
-    )
-    print(f"图片保存成功: {path}")
+    class MockMsgSender:
+        async def text(self, text: str):
+            print(f"[TEXT] {text}")
+
+        async def file(self, path: str):
+            print(f"[FILE] {path}")
+
+
+    class MockContext:
+        def __init__(self, text: str):
+            self.tool_text = text
+            self.msg_sender = MockMsgSender()
+
+
+    async def main():
+        login_service = LoginService()
+        if not login_service.get_login_state().is_login:
+            service = LoginService()
+            success = service.qr_login()  # 阻塞轮询，默认 60s 超时
+            print(f"登录结果：{success}")
+        command = BiliDownloadCommand()
+        ctx = MockContext("#下载 BV1ov42117yC")
+        await command.handle(ctx)
+
+
+    asyncio.run(main())
+    # img_generator = ImageGenerator()
+    # path = img_generator.generate(
+    #     prompt="画一张洛天依",
+    #     save_path="../assets/pictures/AI_draw/test.png"
+    # )
+    # print(f"图片保存成功: {path}")
