@@ -1,0 +1,3 @@
+[submodule "libs/BiliTools"]
+	path = libs/BiliTools
+	url = https://github.com/virtualxiaoman/BiliTools.git
