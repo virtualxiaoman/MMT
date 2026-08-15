@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -76,14 +77,30 @@ class HistoryLogger:
             标准化消息
         """
 
+
+        # 发送消息也写 canonical，让 ChatPipeline 可以从结构化历史读取机器人回复，
+        # 而不是只能从 llm_input 文本里猜角色。
+        self._append_canonical(message_wrapper)
         self._append_llm_input(message_wrapper)
         self._append_human(message_wrapper)
+
+    def append_sends(self, message_wrappers: Iterable[SendMessageWrapper]) -> int:
+        """
+        批量追加发送消息。
+
+        统一封装循环逻辑，后续如果需要增加日志、事务或重试，可以只修改这一个入口。
+        """
+
+        wrappers = list(message_wrappers)
+        for wrapper in wrappers:
+            self.append_send(wrapper)
+        return len(wrappers)
 
     # ==========================================================
     # 路径
     # ==========================================================
 
-    def _session_dir(self, wrapper: RecvMessageWrapper) -> Path:
+    def _session_dir(self, wrapper: RecvMessageWrapper | SendMessageWrapper) -> Path:
         """
         获取当前会话目录
         """
@@ -96,12 +113,12 @@ class HistoryLogger:
                 / str(wrapper.session_id)
         )
 
-    def _month_str(self, wrapper: RecvMessageWrapper) -> str:
+    def _month_str(self, wrapper: RecvMessageWrapper | SendMessageWrapper) -> str:
         return datetime.fromtimestamp(
             wrapper.timestamp
         ).strftime("%Y-%m")
 
-    def _day_str(self, wrapper: RecvMessageWrapper) -> str:
+    def _day_str(self, wrapper: RecvMessageWrapper | SendMessageWrapper) -> str:
         return datetime.fromtimestamp(
             wrapper.timestamp
         ).strftime("%Y-%m-%d")
@@ -169,7 +186,7 @@ class HistoryLogger:
 
     def _append_canonical(
             self,
-            wrapper: RecvMessageWrapper
+            wrapper: RecvMessageWrapper | SendMessageWrapper
     ):
         """
         标准化消息
@@ -256,7 +273,7 @@ class HistoryLogger:
 
     def _build_human_markdown(
             self,
-            wrapper: RecvMessageWrapper
+            wrapper: RecvMessageWrapper | SendMessageWrapper
     ) -> str:
         """
         构造人类阅读版 Markdown（HTML增强）
@@ -347,6 +364,28 @@ class HistoryLogger:
     ">
     {content}
     </div>
+                """.strip()
+                )
+
+            # --------------------------------------------------
+            # 语音
+            # --------------------------------------------------
+            elif seg_type == "record":
+
+                lines.append(
+                    """
+    <div style="
+    display:inline-block;
+    background-color: rgba(102, 204, 255, 0.2);
+    color:#1F2937;
+    padding:8px 12px;
+    border-radius:12px;
+    max-width:75%;
+    line-height:1.6;
+    margin:6px 0;
+    ">
+    [语音]
+    </div>
     """.strip()
                 )
 
@@ -434,7 +473,7 @@ display:block;
 
     def _human_relative_file(
             self,
-            wrapper: RecvMessageWrapper,
+            wrapper: RecvMessageWrapper | SendMessageWrapper,
             file: str
     ) -> str:
         """
@@ -449,7 +488,11 @@ display:block;
 
         image_path = self.root / file
 
-        return os.path.relpath(
-            image_path,
-            md_dir
-        ).replace("\\", "/")
+        try:
+            return os.path.relpath(
+                image_path,
+                md_dir
+            ).replace("\\", "/")
+        except ValueError:
+            # 跨盘符（如 D: 资源写到 G: 历史）时 relpath 无意义，直接返回绝对路径。
+            return str(image_path).replace("\\", "/")

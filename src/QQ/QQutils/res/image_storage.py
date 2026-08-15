@@ -397,6 +397,9 @@ class ImageStorage:
                     image_type=seg_type,
                     date=date
                 )
+                # canonical 里保留相对路径用于历史展示；再补一个绝对路径方便
+                # VLM/表情检测直接读本地文件，避免二次下载。
+                seg["file_abs"] = str(self.bot_root / seg["file"])
 
             except Exception as e:
 

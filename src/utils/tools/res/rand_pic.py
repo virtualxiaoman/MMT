@@ -35,10 +35,10 @@ class RandomPicture:
 
         return found_images
 
-    def get_random_image_path(self) -> str:
+    def get_random_image_path(self) -> str | None:
         """随机返回一个图片文件的绝对路径"""
         if not self.all_images:
-            return "未在指定目录及其子目录中找到任何图片文件。"
+            return None
 
         return str(random.choice(self.all_images))
 

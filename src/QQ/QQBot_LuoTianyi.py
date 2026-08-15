@@ -29,7 +29,9 @@ from src.QQ.QQutils.res.history_loader import HistoryLoader
 from src.QQ.QQutils.res.history_storage import HistoryLogger
 from src.QQ.QQutils.res.image_storage import ImageStorage
 from src.config.QQ_bot_info_loader import BotInfoConfigLoader
+from src.utils.chat.img_describer import ImageDescriber
 from src.utils.chat.decider.reply_decider import ReplyDecisionData
+from src.utils.tools.res.emoji_detector import EmojiDetector
 
 # from src.utils.chat.img_describer import ImageDescriber
 
@@ -51,8 +53,9 @@ class BotManager:
         self.image_storage = ImageStorage(bot_id=CONFIG.bot_id)
         # self.history_logger = HistoryLogger(CONFIG)
 
-        # self.image_describer = ImageDescriber()
-        # self.message_normalizer = MessageNormalizer(self.image_describer)
+        # 进程级共享图片描述器与表情检测器，避免每条消息重复创建连接/会话。
+        self.image_describer = ImageDescriber()
+        self.emoji_detector = EmojiDetector(CONFIG.paths.emoji_dir)
 
         self.registry = CommandRegistry()
         self._init_registry()
@@ -62,7 +65,7 @@ class BotManager:
         prefix = "private_" if is_private else "group_"
         key = f"{prefix}{session_id}"
         if key not in self.sessions:
-            self.sessions[key] = ChatSession(session_id, is_private, CONFIG)
+            self.sessions[key] = ChatSession(session_id, is_private, CONFIG, self.emoji_detector)
         return self.sessions[key]
 
     # api参考 https://docs.ncatbot.xyz/reference
@@ -87,7 +90,7 @@ class BotManager:
         # =========================
         # 1. 是否能回复（不在黑名单里）
         # =========================
-        can_reply = await self._can_reply(session, is_private)
+        can_reply = await self._can_reply(session, is_private, msg)
         if not can_reply:
             logger.info(f"黑名单用户/群不回复")
             return
@@ -95,11 +98,13 @@ class BotManager:
         # =========================
         # 2. 格式化消息，处理多模态数据，建立ctx
         # =========================
-        recv_msg_wrapper = RecvMessageWrapper(msg, CONFIG)
+        recv_msg_wrapper = RecvMessageWrapper(msg, CONFIG,
+                                              emoji_detector=self.emoji_detector, image_describer=self.image_describer)
+        # 先保存图片到本地，VLM 描述与表情检测直接读文件，避免同一 URL 被下载多次。
+        recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)
         recv_msg_wrapper.process_content()
         print(f"原始消息：{recv_msg_wrapper.raw_msg}\nLLM输入消息：{recv_msg_wrapper.llm_msg}\n"
               f"工具类输入消息：{recv_msg_wrapper.tool_msg}")
-        recv_msg_wrapper = self.image_storage.process(recv_msg_wrapper)  # 保存图片
 
         history_logger = HistoryLogger(config=CONFIG)
         history_logger.append_recv(msg, recv_msg_wrapper)  # 保存消息（raw+json+LLM输入+人类可读）
@@ -156,14 +161,19 @@ class BotManager:
             success = service.qr_login()  # 阻塞轮询，默认 60s 超时
             print(f"登录结果：{success}")
 
-    async def _can_reply(self, session: ChatSession, is_private: bool) -> bool:
+    def close(self):
+        """关闭进程级共享资源；bot.run() 退出后由入口调用。"""
+        self.emoji_detector.close()
+        self.image_storage.close()
+
+    async def _can_reply(self, session: ChatSession, is_private: bool, msg) -> bool:
         """
         用assets/config/QQ_reply_settings.yaml判黑/白名单。
         :param session: 对话
         :param is_private: 是否是私聊
         :return:
         """
-        return session.qq_reply_settings.can_reply(session.session_id, is_private)
+        return session.qq_reply_settings.can_reply(session.session_id, is_private, user_id=msg.user_id)
 
 
 # ========== 运行部分 ==========
@@ -183,4 +193,7 @@ async def on_private_message(msg: PrivateMessage):
 
 
 if __name__ == "__main__":
-    bot_client.run(bt_uin=CONFIG.bot_id)
+    try:
+        bot_client.run(bt_uin=CONFIG.bot_id)
+    finally:
+        bot_manager.close()

@@ -6,6 +6,7 @@ from typing import Any
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 
 from src.config.QQ_bot_info_loader import BotConfig
+from src.QQ.QQutils.msg.reply_model import DeliveredPart, ReplyPartKind
 from src.utils.chat.img_describer import ImageDescriber
 from src.utils.tools.res.emoji_detector import EmojiDetector
 
@@ -16,15 +17,21 @@ class RecvMessageWrapper:
     将原始消息标准化
     """
 
-    def __init__(self, msg: PrivateMessage | GroupMessage, config: BotConfig):
+    def __init__(
+            self,
+            msg: PrivateMessage | GroupMessage,
+            config: BotConfig,
+            emoji_detector: EmojiDetector | None = None,
+            image_describer: ImageDescriber | None = None,
+    ):
         self.raw_msg = msg
         self.bot_config = config
         self.data = self._parse_message(msg)
 
-        self.image_describer = ImageDescriber()
-        self.emoji_detector = EmojiDetector(
-            emoji_dir=r"D:\Users\Administrator\Desktop\Emoji\LuoTianyi",  # todo 修改路径
-        )
+        # 优先复用 BotManager/ChatSession 里的共享实例，避免每条消息都新建
+        # ImageDescriber/EmojiDetector 造成连接与文件句柄泄漏。
+        self.image_describer = image_describer or ImageDescriber()
+        self.emoji_detector = emoji_detector or EmojiDetector(config.paths.emoji_dir)
 
         self.processed = False  # 标识有没有对多模态数据进行处理
 
@@ -125,15 +132,16 @@ class RecvMessageWrapper:
             image_content: str = ""
             # image
             if seg["type"] == "image":
-                image_url = self.image_urls
-                if len(image_url) == 1 and self.emoji_detector.is_emoji(image_url[0]):
+                image_files = self.image_files
+                # ImageStorage 已先落盘时直接用本地文件判断，省一次网络下载。
+                if len(image_files) == 1 and self.emoji_detector.is_emoji_file(image_files[0]):
                     image_content += f"这是一个{self.bot_config.name_zh}的表情包。"
             # image or qq_emoji
             try:
-                img_desc = self.image_describer.describe_img(seg["url"])
+                source = seg.get("file_abs") or seg.get("file") or seg.get("url")
+                img_desc = self.image_describer.describe_img(source)
                 if img_desc:
                     image_content += img_desc
-                # seg["content"] = self.image_describer.describe_img(seg["url"])
             except Exception as e:
                 print(f"[MessageWrapper] 图片识别失败: {e}")
             seg["content"] = image_content or None
@@ -184,8 +192,6 @@ class RecvMessageWrapper:
         for seg in self.segments:
             seg_type = seg["type"]
             if seg_type == "text":
-                result.append(seg.get("content") or "")
-            elif seg_type == "emoji":
                 result.append(seg.get("content") or "")
             elif seg_type == "qq_face":
                 result.append(seg.get("content") or "")
@@ -241,6 +247,15 @@ class RecvMessageWrapper:
             seg["url"]
             for seg in self.segments
             if seg["type"] == "image"
+        ]
+
+    @property
+    def image_files(self) -> list[str]:
+        """获取已落盘的本地图片路径，供表情检测/描述复用。"""
+        return [
+            seg.get("file_abs") or seg["file"]
+            for seg in self.segments
+            if seg["type"] == "image" and seg.get("file")
         ]
 
     @property
@@ -361,6 +376,13 @@ class SendMessageWrapper:
                 else:
                     result.append("[图片]")
 
+            elif seg_type == "record":
+                content = seg.get("content")
+                if content:
+                    result.append(f'【语音内容】：{content}')
+                else:
+                    result.append("[语音]")
+
         content = " ".join(result)
 
         time_str = time.strftime(
@@ -453,6 +475,37 @@ class SendMessageBuilder:
         )
 
     # =======================
+    # Record
+    # =======================
+
+    def record(
+            self,
+            message_id: str,
+            *,
+            file: str | None = None,
+            content: str | None = None,
+            summary: str = "",
+            reply_message_id: str | None = None,
+    ) -> SendMessageWrapper:
+        return SendMessageWrapper(
+            message_id=message_id,
+            session_id=self.session_id,
+            is_private=self.is_private,
+            user_id=self.bot_id,
+            user_nickname=self.bot_name,
+            reply_message_id=reply_message_id,
+            segments=[
+                {
+                    "index": 0,
+                    "type": "record",
+                    "summary": summary,
+                    "content": content,
+                    "file": file,
+                }
+            ],
+        )
+
+    # =======================
     # QQ商城表情
     # =======================
 
@@ -538,3 +591,44 @@ class SendMessageBuilder:
                 }
             ],
         )
+
+    # =======================
+    # 交付结果转换
+    # =======================
+
+    def from_delivered_part(self, delivered: DeliveredPart) -> SendMessageWrapper:
+        """
+        将已发送的消息部件转换为可持久化的发送消息对象。
+
+        该入口集中了所有回复类型的映射逻辑，调用方无需关心具体字段差异。
+        """
+
+        part = delivered.part
+
+        if part.kind is ReplyPartKind.TEXT:
+            return self.text(
+                message_id=delivered.message_id,
+                text=part.content,
+            )
+
+        if part.kind is ReplyPartKind.IMAGE:
+            if part.file is None:
+                raise ValueError("图片回复部件缺少 file 字段")
+            return self.image(
+                message_id=delivered.message_id,
+                file=str(part.file),
+                content=part.content,
+                summary=part.summary,
+            )
+
+        if part.kind is ReplyPartKind.RECORD:
+            if part.file is None:
+                raise ValueError("语音回复部件缺少 file 字段")
+            return self.record(
+                message_id=delivered.message_id,
+                file=str(part.file),
+                content=part.content,
+                summary=part.summary,
+            )
+
+        raise ValueError(f"不支持的回复部件类型: {part.kind}")

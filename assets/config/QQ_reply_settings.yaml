@@ -15,6 +15,7 @@ QQ:
       mode: "auto"      # 同上
       whitelist: [ *master_admin_group, 1039857271, 808373730 ]  # 群白名单，优先级高于群黑名单
       blacklist: [*global_blacklist_group]  # 群黑名单，优先级低于群白名单
+      user_blacklist: *global_blacklist_private  # 群消息发送者黑名单，单独封禁用户
   "1291606697": # 机器人QQ号
     name: "砂狼白子"
     private:
@@ -25,6 +26,7 @@ QQ:
       mode: "false"
       whitelist: [*master_admin_group]
       blacklist: *global_blacklist_group
+      user_blacklist: *global_blacklist_private
   "default": # 默认设置，适用于未在上面单独配置的QQ号
     name: "default"
     private:
@@ -35,3 +37,4 @@ QQ:
       mode: "auto"
       whitelist: [*master_admin_group]
       blacklist: *global_blacklist_group
+      user_blacklist: *global_blacklist_private

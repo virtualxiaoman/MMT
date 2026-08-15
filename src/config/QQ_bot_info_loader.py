@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
 
-from src.config.path import QQ_BOT_INFO_DIR
+from src.config.path import EMOJI_DIR, QQ_BOT_INFO_DIR
 
 
 @dataclass(frozen=True)
@@ -10,6 +10,7 @@ class BotPaths:
     music_dirs: list[str] = field(default_factory=list)
     random_picture_dirs: list[str] = field(default_factory=list)
     lyric_dirs: list[str] = field(default_factory=list)
+    emoji_dir: str = ""
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,9 @@ class BotInfoConfigLoader:
         paths = BotPaths(
             music_dirs=list(paths_data.get("music_dirs", [])),
             random_picture_dirs=list(paths_data.get("random_picture_dirs", [])),
-            lyric_dirs=list(paths_data.get("lyric_dirs", []))
+            lyric_dirs=list(paths_data.get("lyric_dirs", [])),
+            # 优先读 yaml 中配置的表情目录；未配置时回退到 assets/emoji/<bot>。
+            emoji_dir=str(paths_data.get("emoji_dir") or EMOJI_DIR / bot_name),
         )
 
         return BotConfig(

@@ -39,7 +39,9 @@ class EmojiDetector:
         cache_dir = Path(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self.db_path = cache_dir / f"{self.emoji_dir.name}.db"
+        # 库名带完整路径哈希，避免不同父目录下的同名 emoji 目录共用同一个 DB。
+        path_hash = hashlib.sha256(str(self.emoji_dir.resolve()).encode("utf-8")).hexdigest()[:16]
+        self.db_path = cache_dir / f"{self.emoji_dir.name}_{path_hash}.db"
 
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -76,6 +78,13 @@ class EmojiDetector:
             return False
 
         return sha in self.sha_set
+
+    def is_emoji_file(self, path: str | Path) -> bool:
+        """判断本地图片文件是否属于表情包库，避免再次下载同一张网络图。"""
+        try:
+            return self._calc_sha256(Path(path)) in self.sha_set
+        except Exception:
+            return False
 
     def close(self):
         self.session.close()

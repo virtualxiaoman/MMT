@@ -77,6 +77,9 @@ class ImageCommand(BaseCommand):
 
         for i in range(pic_nums):
             path = ctx.session.random_picture_provider.get_random_image_path()
+            if path is None:
+                await ctx.msg_sender.text("图片库是空的，暂时没有图片可以发哦~")
+                return True
             if i == 0:
                 await ctx.msg_sender.text(f"呐呐呐~coins-{5 * pic_nums}")  # 首次发文本提示扣除金币，后续只发图
                 # todo 实际扣除金币逻辑
@@ -326,9 +329,10 @@ class DailyReportGenerator:
             }
         ]
 
-        return self.client.one_chat(
+        return await asyncio.to_thread(
+            self.client.one_chat,
             messages,
-            temperature=0.4
+            0.4,
         )
 
         # todo 后续：工具化（代码）总结数据内容，图表，图片输出
@@ -409,7 +413,8 @@ class BanCommand(BaseCommand):
 
         if m.group(2):
             value = int(m.group(2))
-            unit = m.group(3)
+            # 用户只写数字没写单位时按“分钟”理解，避免 TIME_UNITS[None] 抛 KeyError。
+            unit = m.group(3) or "分钟"
 
             duration = value * self.TIME_UNITS[unit]
 
@@ -667,7 +672,8 @@ class ImageGeneratorCommand(BaseCommand):
 
             save_path = self._get_save_path(ctx)
 
-            image_path = self.generator.generate(
+            image_path = await asyncio.to_thread(
+                self.generator.generate,
                 prompt=prompt,
                 save_path=save_path,
                 quality=quality,
@@ -878,6 +884,9 @@ class SendLikeCommand(BaseCommand):
         return text == "赞我"
 
     async def handle(self, ctx: MessageContext) -> bool:
+        if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
+            await ctx.msg_sender.text("只有管理员才能让我疯狂点赞哦~")
+            return True
         user_id = ctx.recv_msg_wrapper.user_id
         result = await ctx.bot.api.send_like(
             user_id=user_id,
@@ -896,6 +905,9 @@ class BiliDownloadCommand(BaseCommand):
         return text.strip().startswith("#下载")
 
     async def handle(self, ctx: MessageContext) -> bool:
+        if str(ctx.recv_msg_wrapper.user_id) != str(ctx.config.admin_qq_id):
+            await ctx.msg_sender.text("下载功能只有管理员可以使用哦~")
+            return True
         text = ctx.tool_text
         bvid = text[len("#下载"):].strip()
 

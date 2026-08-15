@@ -60,11 +60,11 @@ class ConversationManager:
     def add_user(self, text: str):
         """
         添加用户消息。
+
+        注意：即使 enable_memory=False 也不能清空当前消息列表，否则 ChatPipeline 在
+        逐条写入历史时会不断 _reset()，最终只保留最后一条 user。enable_memory 只表示
+        调用方是否需要跨轮保留状态，构造单轮消息列表时仍应允许追加多条消息。
         """
-
-        if not self.enable_memory:
-            self._reset()
-
         self._messages.append({
             "role": "user",
             "content": text
@@ -83,6 +83,9 @@ class ConversationManager:
     def add_assistant(self, message: str | ChatCompletionMessage):
         """
         添加 Assistant 消息。
+
+        这里同样不能因 enable_memory=False 直接丢弃；ChatPipeline 需要显式把历史中的
+        assistant 回复放回上下文，否则模型看不到自己之前的回答。
 
         Parameters
         ----------
@@ -104,8 +107,6 @@ class ConversationManager:
                 })
         """
 
-        if not self.enable_memory:
-            return
         if isinstance(message, str):
             message = {
                 "role": "assistant",

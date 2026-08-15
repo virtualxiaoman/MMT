@@ -288,10 +288,11 @@ class SummaryManager:
         result = self._read_text(path)
         if result:
             return result
-        else:
-            print(f"[load_daily] {target_date}无数据，正在重新生成")
-            self.update_daily(target_date)
-            self.load_daily(target_date)
+        # 文件缺失时尝试生成一次；update_daily 对空历史直接 return，
+        # 所以这里只再读一次，不再递归，避免空数据时无限递归。
+        print(f"[load_daily] {target_date}无数据，正在重新生成")
+        self.update_daily(target_date)
+        return self._read_text(path)
 
     def sync(self) -> None:
         """

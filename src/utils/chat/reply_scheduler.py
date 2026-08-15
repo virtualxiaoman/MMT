@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from enum import Enum, auto
@@ -8,6 +9,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.QQ.QQutils.msg.chat_session import MessageContext
+
+logger = logging.getLogger(__name__)
 
 
 class ReplyTrigger(Enum):
@@ -93,8 +96,17 @@ class ReplyScheduler:
                     trigger = ReplyTrigger.TIMEOUT
                     break
 
-            await self.callback(self.latest_ctx, trigger)  # 对应ChatSession的_handle_reply
-
+            # 本轮消息已经触发回复，清零后只统计回调执行期间新到达的消息。
+            self.pending_count = 0
+            try:
+                await self.callback(self.latest_ctx, trigger)  # 对应ChatSession的_handle_reply
+            except Exception:
+                # 回调失败不能把调度器卡死；finally 仍会清理任务，并给回复期间到达的新消息再开一轮。
+                logger.exception("回复回调执行失败")
         finally:
+            had_pending = self.pending_count > 0
             self.pending_count = 0
             self.reply_task = None
+            if had_pending:
+                # 回复执行期间又来新消息，立即开新一轮等待，避免这些消息被吞掉。
+                self.reply_task = asyncio.create_task(self._reply_loop())

@@ -70,7 +70,11 @@ class ChatPipeline:
 
         self.knowledge = None
         if name_en:
-            self.knowledge = (KnowledgeLoader.load(name_en))
+            try:
+                self.knowledge = KnowledgeLoader.load(name_en)
+            except FileNotFoundError:
+                # 角色没有知识库时继续聊天，不让缺少可选知识目录导致整个会话不可用。
+                self.knowledge = None
         self.name_zh = name_zh
 
     # ======================================================
@@ -91,12 +95,15 @@ class ChatPipeline:
         conv = ConversationManager(system_prompt=system_prompt, enable_memory=False)
         # 5. 读取历史消息
         self._append_history(conv=conv)
-        # # 6. 添加用户消息
-        # conv.add_user(user_query)
+        # 6. 兜底：正常 QQ 流程会先写历史再读回，因此历史最后一条通常是当前 user；
+        #    若直接调用 ChatPipeline 或历史未包含当前消息，则显式补上，避免漏发。
+        if len(conv) <= 1 or conv.messages[-1].get("role") != "user":
+            conv.add_user(user_query)
         # 7. 调用LLM
         reply = self.llm.one_chat(conv.messages)
         # 8. 同步summary
-        self.summary_manager.sync()
+        if self.summary_manager is not None:
+            self.summary_manager.sync()
         return reply
 
     # ======================================================
@@ -134,28 +141,55 @@ class ChatPipeline:
             prompt += f"\n\n以下是相关知识:\n{knowledge}"
         return prompt
 
-    def _get_history(self) -> list[str]:
-        return HistoryLoader.load_last_list(
+    def _get_history(self) -> list[dict]:
+        return HistoryLoader.load_recent_messages(
             bot_id=self.bot_id,
             is_private=self.is_private,
             session_id=self.session_id,
-            max_lines=30,
+            max_messages=30,
         )
 
     def _append_history(self, conv: ConversationManager) -> None:
+        """把 canonical 结构化历史写入 Conversation，按 user/assistant 交替组织。"""
         buffer = []
         for msg in self._get_history():
-            prefix, content = msg.split("：", 1)
-            _, speaker = prefix.split("] ", 1)
-            if speaker == self.name_zh:
+            is_bot = str(msg.get("user_id")) == str(self.bot_id)
+            text = self._segments_text(msg.get("segments", []))
+            if is_bot:
                 if buffer:
                     conv.add_user("\n".join(buffer))
                     buffer.clear()
-                conv.add_assistant(content)
+                if text:
+                    conv.add_assistant(text)
             else:
-                buffer.append(f"{speaker}：{content}")
+                nickname = msg.get("user_nickname") or msg.get("user_id") or "用户"
+                buffer.append(f"{nickname}：{text}")
         if buffer:
             conv.add_user("\n".join(buffer))
+
+    @staticmethod
+    def _segments_text(segments: list[dict]) -> str:
+        """把 canonical segments 渲染成 LLM 可读文本，避免解析 llm_input 的固定分隔符。"""
+        parts = []
+        for seg in segments:
+            seg_type = seg.get("type")
+            if seg_type == "text":
+                parts.append(seg.get("content") or "")
+            elif seg_type == "at":
+                parts.append(f"@{seg.get('qq_id') or ''}")
+            elif seg_type == "qq_face":
+                parts.append(seg.get("content") or "[QQ表情]")
+            elif seg_type == "qq_emoji":
+                parts.append(f"[表情包：{seg.get('summary') or seg.get('content') or ''}]")
+            elif seg_type == "image":
+                content = seg.get("content")
+                parts.append(f"[图片内容：{content}]" if content else "[图片]")
+            elif seg_type == "record":
+                content = seg.get("content")
+                parts.append(f"[语音内容：{content}]" if content else "[语音]")
+            else:
+                parts.append(f"[未知消息段：{seg_type}]")
+        return " ".join(part for part in parts if part)
 
 
 if __name__ == "__main__":

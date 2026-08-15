@@ -41,69 +41,42 @@ class LyricRepository:
             self.lyric_dirs = [Path(lyric_dir)]
         else:
             self.lyric_dirs = [Path(p) for p in lyric_dir]
+        # 启动时一次性建立“歌词行 -> 下一句”索引；LyricCommand 每条消息都触发匹配，
+        # 不能每次都在 async 事件循环里递归扫描全部歌词文件。
+        self._index: dict[str, list[str]] = self._build_index()
 
     def find_next_line(self, lyric: str) -> str | None:
         """
         根据一句歌词寻找下一句
         """
-
         target = self._normalize_text(lyric)
-
-        if not target:
+        # 过滤单字，避免“啊”这类语气词命中歌词。
+        if not target or len(target) <= 1:
             return None
+        matches = self._index.get(target)
+        return matches[0] if matches else None
 
+    def _build_index(self) -> dict[str, list[str]]:
+        """扫描所有歌词文件，把每一句歌词映射到它的下一句。"""
+        index: dict[str, list[str]] = {}
         for lyric_dir in self.lyric_dirs:
-
             if not lyric_dir.exists():
-                logger.warning(
-                    f"歌词目录不存在: {lyric_dir}"
-                )
+                logger.warning("歌词目录不存在: %s", lyric_dir)
                 continue
-
             for file in lyric_dir.rglob("*"):
-
-                if (
-                        not file.is_file()
-                        or file.suffix.lower()
-                        not in self.SUPPORTED_EXTENSIONS
-                ):
+                if not file.is_file() or file.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
                     continue
-
-                result = self._search_file(
-                    file,
-                    target
-                )
-
-                if result:
-                    return result
-
-        return None
-
-    def _search_file(
-            self,
-            lyric_file: Path,
-            target: str
-    ) -> str | None:
-
-        lines = self._load_lyrics(lyric_file)
-
-        if not lines:
-            return None
-
-        for idx, line in enumerate(lines):
-
-            if line != target:
-                continue
-
-            if idx + 1 < len(lines):
-                return lines[idx + 1]
-
-            return (
-                f"这首《{lyric_file.stem}》"
-                "你喜欢吗？"
-            )
-
-        return None
+                try:
+                    lines = self._load_lyrics(file)
+                except Exception:
+                    logger.warning("读取歌词失败: %s", file, exc_info=True)
+                    continue
+                for idx, line in enumerate(lines):
+                    if len(line) <= 1:
+                        continue
+                    next_line = lines[idx + 1] if idx + 1 < len(lines) else f"这首《{file.stem}》你喜欢吗？"
+                    index.setdefault(line, []).append(next_line)
+        return index
 
     def _load_lyrics(self, lyric_file: Path):
 
@@ -216,42 +189,3 @@ class LyricRepository:
         )
 
         return text
-# class LyricRepository:
-#
-#     def __init__(self, lyric_dir: str | list[str]):
-#         if isinstance(lyric_dir, str):
-#             self.lyric_dirs = [Path(lyric_dir)]
-#         else:
-#             self.lyric_dirs = [Path(p) for p in lyric_dir]
-#
-#     def find_next_line(self, lyric: str) -> str | None:
-#         target = lyric.strip()
-#         for lyric_dir in self.lyric_dirs:
-#             if not lyric_dir.exists():
-#                 logger.warning(f"歌词目录不存在: {lyric_dir}")
-#                 continue
-#             for txt_file in lyric_dir.rglob("*.txt"):
-#                 result = self._search_file(txt_file, target)
-#                 if result is not None:
-#                     return result
-#         return None
-#
-#     def _search_file(self, txt_file: Path, target: str) -> str | None:
-#         try:
-#             with open(txt_file, "r", encoding="utf-8") as f:
-#                 lines = [line.strip() for line in f if line.strip()]
-#         except Exception as e:
-#             logger.warning(f"读取歌词失败: {txt_file} {e}")
-#             return None
-#
-#         for idx, line in enumerate(lines):
-#             if len(line) == 1:
-#                 return None
-#             if line != target:
-#                 continue
-#             if idx < len(lines) - 1:
-#                 return lines[idx + 1]
-#             song_name = txt_file.stem
-#             return f"这首《{song_name}》你喜欢吗？"
-#
-#         return None

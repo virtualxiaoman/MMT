@@ -69,6 +69,8 @@ class ImageDescriber:
         self.max_pixels = max_pixels
 
     def describe_img(self, image_url: str) -> str:
+        # 兼容 URL 与本地路径；消息链路上图片已由 ImageStorage 落盘时，
+        # 直接读本地文件可以省掉一次重复下载。
         image_base64 = self._image_url_to_base64(image_url=image_url)
 
         messages = [
@@ -103,9 +105,13 @@ class ImageDescriber:
         return response.output.choices[0].message.content[0]["text"]
 
     def _image_url_to_base64(self, image_url: str) -> str:
-        response = requests.get(image_url, timeout=20)
-        response.raise_for_status()
-        image = Image.open(io.BytesIO(response.content))
+        path = Path(image_url)
+        if path.is_file():
+            image = Image.open(path)
+        else:
+            response = requests.get(image_url, timeout=20)
+            response.raise_for_status()
+            image = Image.open(io.BytesIO(response.content))
         image = ImageResizer.preprocess(image=image, max_pixels=self.max_pixels)
         buffer = io.BytesIO()
         image.save(buffer, format="JPEG", quality=90, optimize=True)

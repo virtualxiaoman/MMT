@@ -1,5 +1,6 @@
 import yaml
 import os
+import copy
 from pathlib import Path
 
 from src.config.path import CONFIG_DIR
@@ -27,6 +28,8 @@ class ModelConfig:
     # 回复
     ALLOWED_REPLY_COMBOS = [
         ("deepseek-chat", "api"),
+        ("deepseek-v4-pro", "api"),
+        ("deepseek-v4-flash", "api"),
         # ("qwen3-vl:4b", "local"), # 假设未来回复模型也支持本地 qwen
     ]
 
@@ -42,7 +45,8 @@ class ModelConfig:
     def __init__(self, config_path=None):
         if config_path is None:
             config_path = Path(CONFIG_DIR) / "models.yaml"
-        self.config = self.DEFAULT_CONFIG.copy()
+        # 深拷贝默认配置，避免实例间共享嵌套 dict 导致意外串改。
+        self.config = copy.deepcopy(self.DEFAULT_CONFIG)
         self._load_and_validate(config_path)
 
     def _get_standard_name(self, name):

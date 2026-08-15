@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import re
 from datetime import datetime, date
 from pathlib import Path
@@ -108,6 +109,34 @@ class HistoryLoader:
 
         messages = cls._split_messages(cls._read_all(file))
         return messages[-max_lines:]
+
+    @classmethod
+    def load_recent_messages(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+            max_messages: int = DEFAULT_MAX_LINES,
+    ) -> list[dict]:
+        """
+        从 canonical JSONL 读取最近 N 条结构化消息，跨日期累计。
+
+        canonical 是 ChatPipeline 构造上下文的可靠来源，包含 user_id、nickname、
+        timestamp、segments 等字段，不再依赖 llm_input 的文本格式。
+        """
+        if max_messages <= 0:
+            raise ValueError("max_messages 必须大于0。")
+        result: list[dict] = []
+        for _, file in cls.iter_canonical_files(bot_id, is_private, session_id):
+            for line in file.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    result.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # 单条损坏不影响其他历史消息，跳过比整体失败更稳。
+                    continue
+        return result[-max_messages:]
 
     @classmethod
     def load_today(
@@ -276,32 +305,18 @@ class HistoryLoader:
             is_private: bool,
             session_id: str | int,
     ) -> Generator[tuple[date, Path], None, None]:
-        """
-        按时间顺序遍历当前 Session 的所有历史聊天文件。
+        """按时间顺序遍历 llm_input 文本文件。"""
+        yield from cls._iter_category_files(bot_id, is_private, session_id, "llm_input", "*.txt")
 
-        Yields
-        ------
-        tuple[date, Path]
-
-            (
-                datetime.date,
-                txt文件路径
-            )
-        """
-
-        history_dir = cls._get_history_dir(bot_id, is_private, session_id)
-
-        if not history_dir.exists():
-            return
-
-        for month_dir in sorted(p for p in history_dir.iterdir() if p.is_dir()):
-            for file in sorted(month_dir.glob("*.txt")):
-                try:
-                    day = datetime.strptime(file.stem, "%Y-%m-%d").date()
-                except ValueError:
-                    continue
-
-                yield day, file
+    @classmethod
+    def iter_canonical_files(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+    ) -> Generator[tuple[date, Path], None, None]:
+        """按时间顺序遍历 canonical JSONL 文件，供结构化历史读取使用。"""
+        yield from cls._iter_category_files(bot_id, is_private, session_id, "canonical", "*.jsonl")
 
     @classmethod
     def count(
@@ -424,8 +439,7 @@ class HistoryLoader:
             return "\n".join(
                 messages[start:end]
             )
-        else:
-            return None
+        return ""
 
     @classmethod
     def get_first_date(
@@ -501,6 +515,26 @@ class HistoryLoader:
 
         session_type = "private" if is_private else "group"
         return Path(QQ_HISTORY_DIR) / str(bot_id) / session_type / str(session_id)
+
+    @classmethod
+    def _iter_category_files(
+            cls,
+            bot_id: str | int,
+            is_private: bool,
+            session_id: str | int,
+            category: str,
+            pattern: str,
+    ) -> Generator[tuple[date, Path], None, None]:
+        """按 YYYY-MM/YYYY-MM-DD.后缀 的顺序遍历某个历史分类目录。"""
+        history_dir = cls._get_session_dir(bot_id, is_private, session_id) / category
+        if not history_dir.exists():
+            return
+        for month_dir in sorted(p for p in history_dir.iterdir() if p.is_dir()):
+            for file in sorted(month_dir.glob(pattern)):
+                try:
+                    yield datetime.strptime(file.stem, "%Y-%m-%d").date(), file
+                except ValueError:
+                    continue
 
     @classmethod
     def _get_history_dir(
@@ -592,411 +626,6 @@ class HistoryLoader:
             return "\n".join(messages)
 
         return "\n".join(messages[-max_messages:])
-
-
-# class HistoryLoader:
-#     """
-#     聊天历史加载器。
-#
-#     本类仅负责读取聊天历史，不涉及任何 LLM 或 Summary 逻辑。
-#
-#     提供以下能力：
-#
-#         1. 读取最近 N 条聊天记录。
-#         2. 读取今天全部聊天记录。
-#         3. 读取指定日期聊天记录。
-#         4. 按天遍历整个 Session 的聊天记录。
-#         5. 按固定消息数遍历整个 Session（iter_chunks）。
-#
-#     目录结构：
-#
-#         QQ_HISTORY_DIR/
-#             bot_id/
-#                 private/
-#                     session_id/
-#                         llm_input/
-#                             2026-07/
-#                                 2026-07-01.txt
-#                                 2026-07-02.txt
-#                                 ...
-#
-#                 group/
-#                     session_id/
-#                         llm_input/
-#                             2026-07/
-#                                 ...
-#     """
-#
-#     DEFAULT_MAX_LINES = 100
-#
-#     DEFAULT_CHUNK_SIZE = 500
-#
-#     # ------------------------------------------------------------------
-#     # Public API
-#     # ------------------------------------------------------------------
-#
-#     @classmethod
-#     def load_last(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#             max_lines: int = DEFAULT_MAX_LINES,
-#     ) -> str:
-#         """
-#         读取最近 max_lines 条聊天记录（仅今天）。
-#
-#         Parameters
-#         ----------
-#         bot_id
-#             Bot QQ。
-#
-#         is_private
-#             是否私聊。
-#
-#         session_id
-#             会话ID。
-#
-#         max_lines
-#             最近多少条。
-#
-#         Returns
-#         -------
-#         str
-#         """
-#
-#         if max_lines <= 0:
-#             raise ValueError("max_lines 必须大于0。")
-#
-#         file = cls._get_history_file(
-#             bot_id,
-#             is_private,
-#             session_id,
-#             datetime.now().date(),
-#         )
-#
-#         if not file.exists():
-#             return ""
-#
-#         return cls._read_last_lines(
-#             file,
-#             max_lines,
-#         )
-#
-#     @classmethod
-#     def load_today(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#     ) -> str:
-#         """
-#         读取今天全部聊天记录。
-#         """
-#
-#         return cls.load_date(
-#             bot_id,
-#             is_private,
-#             session_id,
-#             datetime.now().date(),
-#         )
-#
-#     @classmethod
-#     def load_date(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#             target_date: date,
-#     ) -> str:
-#         """
-#         读取指定日期全部聊天记录。
-#
-#         Parameters
-#         ----------
-#         target_date
-#             datetime.date。
-#         """
-#
-#         file = cls._get_history_file(
-#             bot_id,
-#             is_private,
-#             session_id,
-#             target_date,
-#         )
-#
-#         if not file.exists():
-#             return ""
-#
-#         return cls._read_all(file)
-#
-#     @classmethod
-#     def iter_daily(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#     ) -> Generator[tuple[date, str], None, None]:
-#         """
-#         按日期遍历聊天记录。
-#         """
-#
-#         for day, file in cls.iter_files(
-#                 bot_id,
-#                 is_private,
-#                 session_id,
-#         ):
-#
-#             history = cls._read_all(file)
-#
-#             if history.strip():
-#                 yield day, history
-#
-#     @classmethod
-#     def iter_chunks(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#             chunk_size: int = DEFAULT_CHUNK_SIZE,
-#     ) -> Generator[tuple[date, date, str], None, None]:
-#         """
-#         按固定消息数遍历整个 Session。
-#
-#         一个 Chunk 可以跨越多个日期。
-#
-#         Yields
-#         ------
-#         (
-#             起始日期,
-#             结束日期,
-#             聊天记录
-#         )
-#         """
-#
-#         if chunk_size <= 0:
-#             raise ValueError("chunk_size 必须大于0。")
-#
-#         buffer: list[str] = []
-#
-#         start_date: date | None = None
-#         end_date: date | None = None
-#
-#         for day, history in cls.iter_daily(
-#                 bot_id,
-#                 is_private,
-#                 session_id,
-#         ):
-#
-#             lines = history.splitlines()
-#
-#             if not lines:
-#                 continue
-#
-#             if start_date is None:
-#                 start_date = day
-#
-#             end_date = day
-#
-#             for line in lines:
-#
-#                 if not line.strip():
-#                     continue
-#
-#                 # 当前chunk第一次加入消息
-#                 if not buffer:
-#                     if start_date is None:
-#                         start_date = day
-#
-#                     end_date = day
-#
-#                 buffer.append(line)
-#
-#                 if len(buffer) >= chunk_size:
-#                     yield (
-#                         start_date,
-#                         end_date,
-#                         "\n".join(buffer),
-#                     )
-#
-#                     buffer.clear()
-#
-#                     # 清空日期状态
-#                     # 下一条消息重新决定开始日期
-#                     start_date = None
-#                     end_date = None
-#         if buffer:
-#             yield (
-#                 start_date,
-#                 end_date,
-#                 "\n".join(buffer),
-#             )
-#
-#     @classmethod
-#     def iter_files(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#     ) -> Generator[tuple[date, Path], None, None]:
-#         """
-#         按时间顺序遍历当前 Session 的所有历史聊天文件。
-#
-#         Yields
-#         ------
-#         tuple[date, Path]
-#
-#             (
-#                 datetime.date,
-#                 txt文件路径
-#             )
-#         """
-#
-#         history_dir = cls._get_history_dir(
-#             bot_id,
-#             is_private,
-#             session_id,
-#         )
-#
-#         if not history_dir.exists():
-#             return
-#
-#         for month_dir in sorted(
-#                 p
-#                 for p in history_dir.iterdir()
-#                 if p.is_dir()
-#         ):
-#
-#             for file in sorted(month_dir.glob("*.txt")):
-#
-#                 try:
-#
-#                     day = datetime.strptime(
-#                         file.stem,
-#                         "%Y-%m-%d",
-#                     ).date()
-#
-#                 except ValueError:
-#
-#                     continue
-#
-#                 yield day, file
-#
-#     # ------------------------------------------------------------------
-#     # Private
-#     # ------------------------------------------------------------------
-#
-#     @staticmethod
-#     def _get_session_dir(
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#     ) -> Path:
-#         """
-#         获取 Session 根目录。
-#
-#         返回：
-#
-#             QQ_HISTORY_DIR/
-#                 bot_id/
-#                     private/
-#                         session_id/
-#
-#         或
-#
-#             QQ_HISTORY_DIR/
-#                 bot_id/
-#                     group/
-#                         session_id/
-#         """
-#
-#         session_type = "private" if is_private else "group"
-#
-#         return (
-#                 Path(QQ_HISTORY_DIR)
-#                 / str(bot_id)
-#                 / session_type
-#                 / str(session_id)
-#         )
-#
-#     @classmethod
-#     def _get_history_dir(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#     ) -> Path:
-#         """
-#         获取 llm_input 根目录。
-#         """
-#
-#         return (
-#                 cls._get_session_dir(
-#                     bot_id,
-#                     is_private,
-#                     session_id,
-#                 )
-#                 / "llm_input"
-#         )
-#
-#     @classmethod
-#     def _get_history_file(
-#             cls,
-#             bot_id: str | int,
-#             is_private: bool,
-#             session_id: str | int,
-#             target_date: date,
-#     ) -> Path:
-#         """
-#         获取指定日期对应的聊天记录文件。
-#         """
-#
-#         month = target_date.strftime("%Y-%m")
-#
-#         filename = target_date.strftime("%Y-%m-%d") + ".txt"
-#
-#         return (
-#                 cls._get_history_dir(
-#                     bot_id,
-#                     is_private,
-#                     session_id,
-#                 )
-#                 / month
-#                 / filename
-#         )
-#
-#     @staticmethod
-#     def _read_all(
-#             file_path: Path,
-#     ) -> str:
-#         """
-#         读取整个文件。
-#         """
-#
-#         return file_path.read_text(
-#             encoding="utf-8"
-#         )
-#
-#     @staticmethod
-#     def _read_last_lines(
-#             file_path: Path,
-#             max_lines: int,
-#     ) -> str:
-#         """
-#         读取最后 max_lines 行。
-#         """
-#
-#         lines = file_path.read_text(
-#             encoding="utf-8"
-#         ).splitlines()
-#
-#         if len(lines) <= max_lines:
-#             return "\n".join(lines)
-#
-#         return "\n".join(
-#             lines[-max_lines:]
-#         )
-
 
 if __name__ == "__main__":
 
